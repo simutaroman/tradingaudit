@@ -1,0 +1,6 @@
+@TradingAudit.Server_HostAddress = http://localhost:5203
+
+GET {{TradingAudit.Server_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
