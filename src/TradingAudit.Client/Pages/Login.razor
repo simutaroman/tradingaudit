@@ -1,0 +1,110 @@
+﻿@page "/login"
+@using TradingAudit.Client.Services
+@inject IAuthService AuthService
+@inject NavigationManager Navigation
+
+<MudContainer MaxWidth="MaxWidth.Small" Class="mt-16">
+    <MudCard Elevation="4">
+        <MudCardHeader>
+            <CardHeaderContent>
+                <MudText Typo="Typo.h5" Align="Align.Center">Вхід у систему</MudText>
+            </CardHeaderContent>
+        </MudCardHeader>
+        <MudCardContent>
+            @if (_showError)
+            {
+                <MudAlert Severity="Severity.Error" Class="mb-4">@_errorText</MudAlert>
+            }
+
+            <MudForm @bind-IsValid="@_success">
+                <MudTextField T="string"
+                              Label="Email"
+                              @bind-Value="_email"
+                              Required="true"
+                              RequiredError="Введіть email"
+                              InputType="InputType.Email"
+                              Variant="Variant.Outlined"
+                              Class="mb-4" />
+
+                <MudTextField T="string"
+                              Label="Пароль"
+                              @bind-Value="_password"
+                              Required="true"
+                              RequiredError="Введіть пароль"
+                              InputType="@_passwordInput"
+                              Adornment="Adornment.End"
+                              AdornmentIcon="@_passwordInputIcon"
+                              OnAdornmentClick="TogglePasswordVisibility"
+                              Variant="Variant.Outlined" />
+            </MudForm>
+        </MudCardContent>
+        <MudCardActions Class="d-flex justify-space-between align-center pa-4">
+            <MudLink Href="/register">Зареєструватися</MudLink>
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       Disabled="@(!_success)"
+                       OnClick="ExecuteLogin">
+                @if (_isLoading)
+                {
+                    <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
+                    <MudText Class="ms-2">Вхід...</MudText>
+                }
+                else
+                {
+                    <MudText>Увійти</MudText>
+                }
+            </MudButton>
+        </MudCardActions>
+    </MudCard>
+</MudContainer>
+
+@code {
+    bool _success;
+    bool _isLoading;
+    bool _showError;
+    string _errorText = "";
+
+    string _email = "";
+    string _password = "";
+
+    // Логіка показу пароля
+    bool _isShowPassword;
+    InputType _passwordInput = InputType.Password;
+    string _passwordInputIcon = Icons.Material.Filled.VisibilityOff;
+
+    void TogglePasswordVisibility()
+    {
+        if (_isShowPassword)
+        {
+            _isShowPassword = false;
+            _passwordInputIcon = Icons.Material.Filled.VisibilityOff;
+            _passwordInput = InputType.Password;
+        }
+        else
+        {
+            _isShowPassword = true;
+            _passwordInputIcon = Icons.Material.Filled.Visibility;
+            _passwordInput = InputType.Text;
+        }
+    }
+
+    async Task ExecuteLogin()
+    {
+        _showError = false;
+        _isLoading = true;
+
+        var result = await AuthService.Login(_email, _password);
+
+        _isLoading = false;
+
+        if (result == null) // Успіх (null означає немає помилки)
+        {
+            Navigation.NavigateTo("/");
+        }
+        else
+        {
+            _errorText = result;
+            _showError = true;
+        }
+    }
+}

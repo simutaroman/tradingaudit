@@ -1,0 +1,145 @@
+﻿@page "/images"
+@attribute [Authorize]
+@using TradingAudit.Client.Services
+@using TradingAudit.Shared
+@inject IImageService ImageService
+@inject ISnackbar Snackbar
+
+<PageTitle>My Trading Setups</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
+
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-4">
+        <MudText Typo="Typo.h4">Мої графіки</MudText>
+
+        <MudFileUpload T="IBrowserFile" FilesChanged="UploadFile">
+            <ActivatorContent>
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.CloudUpload">
+                    Завантажити скріншот
+                </MudButton>
+            </ActivatorContent>
+        </MudFileUpload>
+    </MudStack>
+
+    @if (_isLoadingData)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
+    }
+    else if (_images.Count == 0)
+    {
+        <MudAlert Severity="Severity.Info">У вас поки немає збережених графіків. Завантажте перший!</MudAlert>
+    }
+    else
+    {
+        <MudGrid>
+            @foreach (var img in _images)
+            {
+                <MudItem xs="12" sm="6" md="4" lg="3">
+                    <MudCard Elevation="3" Class="d-flex flex-column" Style="height: 100%;">
+                        <a href="@img.Url" target="_blank">
+                            <MudImage Src="@img.Url"
+                                      Alt="@img.Name"
+                                      ObjectFit="ObjectFit.Cover"
+                                      Height="200"
+                                      Fluid="true"
+                                      Class="rounded-t-lg" />
+                        </a>
+
+                        <MudCardContent>
+                            <MudText Typo="Typo.subtitle1" Style="font-weight:bold">@img.Name</MudText>
+                        </MudCardContent>
+
+                        <MudCardActions>
+                            <MudSpacer />
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                           Color="Color.Error"
+                                           OnClick="@(() => DeleteImage(img))"
+                                           Size="Size.Small" />
+                        </MudCardActions>
+                    </MudCard>
+                </MudItem>
+            }
+        </MudGrid>
+    }
+</MudContainer>
+
+<MudOverlay @bind-Visible="_isUploading" DarkBackground="true" Absolute="true">
+    <MudProgressCircular Color="Color.Secondary" Indeterminate="true" Size="Size.Large" />
+    <MudText Class="mt-2 text-white">Завантаження...</MudText>
+</MudOverlay>
+
+@code {
+    private List<UserImageDto> _images = new();
+    private bool _isLoadingData = true;
+    private bool _isUploading = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadImages();
+    }
+
+    private async Task LoadImages()
+    {
+        _isLoadingData = true;
+        try
+        {
+            _images = await ImageService.GetAllImages();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Помилка завантаження списку: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isLoadingData = false;
+        }
+    }
+
+    private async Task UploadFile(IBrowserFile file)
+    {
+        if (file == null) return;
+
+        _isUploading = true;
+        try
+        {
+            // Для назви поки беремо просто назву файлу (можна зробити діалог для вводу назви)
+            var uploadedImage = await ImageService.UploadImage(file, file.Name);
+
+            if (uploadedImage != null)
+            {
+                _images.Add(uploadedImage); // Додаємо в список без перезавантаження сторінки
+                Snackbar.Add("Графік успішно завантажено!", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add("Помилка при завантаженні.", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Помилка: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isUploading = false;
+        }
+    }
+
+    private async Task DeleteImage(UserImageDto img)
+    {
+        // Тут можна додати MudDialog для підтвердження видалення ("Ви впевнені?")
+        // Але для швидкості поки видаляємо одразу
+        try
+        {
+            await ImageService.DeleteImage(img.Id);
+            _images.Remove(img); // Видаляємо з UI
+            Snackbar.Add("Видалено", Severity.Info);
+        }
+        catch (Exception)
+        {
+            Snackbar.Add("Не вдалося видалити зображення", Severity.Error);
+        }
+    }
+}

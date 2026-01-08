@@ -1,0 +1,102 @@
+﻿@page "/register"
+@using TradingAudit.Client.Services
+@inject IAuthService AuthService
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+
+<MudContainer MaxWidth="MaxWidth.Small" Class="mt-16">
+    <MudCard Elevation="4">
+        <MudCardHeader>
+            <CardHeaderContent>
+                <MudText Typo="Typo.h5" Align="Align.Center">Реєстрація</MudText>
+            </CardHeaderContent>
+        </MudCardHeader>
+        <MudCardContent>
+            <MudForm @ref="_form" @bind-IsValid="@_success">
+
+                <MudTextField T="string"
+                              Label="Email"
+                              @bind-Value="_email"
+                              Required="true"
+                              RequiredError="Email обов'язковий"
+                              InputType="InputType.Email"
+                              Variant="Variant.Outlined"
+                              Class="mb-4" />
+
+                <MudTextField T="string"
+                              Label="Пароль"
+                              @bind-Value="_password"
+                              Required="true"
+                              RequiredError="Пароль обов'язковий"
+                              HelperText="Мінімум 1 велика літера, 1 цифра, 1 спецсимвол"
+                              InputType="InputType.Password"
+                              Variant="Variant.Outlined"
+                              Class="mb-4" />
+
+                <MudTextField T="string"
+                              Label="Підтвердіть пароль"
+                              @bind-Value="_confirmPassword"
+                              Required="true"
+                              Validation="@(new Func<string, string?>(PasswordMatch))"
+                              InputType="InputType.Password"
+                              Variant="Variant.Outlined" />
+            </MudForm>
+        </MudCardContent>
+        <MudCardActions Class="d-flex justify-space-between align-center pa-4">
+            <MudLink Href="/login">Вже є акаунт?</MudLink>
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       Disabled="@(!_success)"
+                       OnClick="ExecuteRegister">
+                @if (_isLoading)
+                {
+                    <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
+                    <MudText Class="ms-2">Реєстрація...</MudText>
+                }
+                else
+                {
+                    <MudText>Створити</MudText>
+                }
+            </MudButton>
+        </MudCardActions>
+    </MudCard>
+</MudContainer>
+
+@code {
+    MudForm _form = default!;
+    bool _success;
+    bool _isLoading;
+
+    string _email = "";
+    string _password = "";
+    string _confirmPassword = "";
+
+    // Валідатор співпадіння паролів
+    private string? PasswordMatch(string arg)
+    {
+        if (_password != arg)
+            return "Паролі не співпадають";
+        return null;
+    }
+
+    async Task ExecuteRegister()
+    {
+        _isLoading = true;
+        try
+        {
+            await AuthService.Register(_email, _password);
+
+            // Якщо все ок - показуємо зелене повідомлення і йдемо на логін
+            Snackbar.Add("Реєстрація успішна! Тепер увійдіть.", Severity.Success);
+            Navigation.NavigateTo("/login");
+        }
+        catch (Exception)
+        {
+            Snackbar.Add("Помилка реєстрації. Можливо такий email вже існує або пароль надто простий.", Severity.Error);
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+}

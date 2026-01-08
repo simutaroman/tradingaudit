@@ -1,6 +1,33 @@
-﻿<Router AppAssembly="@typeof(App).Assembly" NotFoundPage="typeof(Pages.NotFound)">
-    <Found Context="routeData">
-        <RouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)"/>
-        <FocusOnNavigate RouteData="@routeData" Selector="h1" />
-    </Found>
-</Router>
+﻿@using Microsoft.AspNetCore.Components.Authorization
+@using TradingAudit.Client.Layout
+
+<CascadingAuthenticationState>
+    <Router AppAssembly="@typeof(App).Assembly">
+        <Found Context="routeData">
+            <AuthorizeRouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)">
+                <NotAuthorized>
+                    <LayoutView Layout="@typeof(MainLayout)">
+                        <MudContainer Class="mt-10" MaxWidth="MaxWidth.Small">
+                            <MudAlert Severity="Severity.Warning" Variant="Variant.Filled" Class="mb-4">
+                                Доступ заборонено.
+                            </MudAlert>
+                            <MudButton Variant="Variant.Filled" Color="Color.Primary" Href="login" FullWidth="true">
+                                Увійти
+                            </MudButton>
+                        </MudContainer>
+                    </LayoutView>
+                </NotAuthorized>
+            </AuthorizeRouteView>
+            <FocusOnNavigate RouteData="@routeData" Selector="h1" />
+        </Found>
+
+        <NotFound>
+            <LayoutView Layout="@typeof(MainLayout)">
+                <MudContainer Class="mt-10 text-center">
+                    <MudText Typo="Typo.h3" Color="Color.Error">404</MudText>
+                    <MudText Typo="Typo.h5">Page not found</MudText>
+                </MudContainer>
+            </LayoutView>
+        </NotFound>
+    </Router>
+</CascadingAuthenticationState>
