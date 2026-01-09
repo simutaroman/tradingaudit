@@ -2,6 +2,7 @@
 using Microsoft.EntityFrameworkCore;
 using Scalar.AspNetCore;
 using TradingAudit.Server.Data;
+using TradingAudit.Server.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -24,8 +25,24 @@ builder.Services.AddEndpointsApiExplorer();
 
 // !! НОВИЙ OPEN API (Нативний) !!
 builder.Services.AddOpenApi();
+builder.Services.AddSingleton<IBlobService, BlobService>();
 
 var app = builder.Build();
+
+using (var scope = app.Services.CreateScope())
+{
+    var services = scope.ServiceProvider;
+    try
+    {
+        var context = services.GetRequiredService<ApplicationDbContext>();
+        context.Database.Migrate();
+    }
+    catch (Exception ex)
+    {
+        var logger = services.GetRequiredService<ILogger<Program>>();
+        logger.LogError(ex, "Error during applying migrations");
+    }
+}
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())

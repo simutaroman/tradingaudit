@@ -1,134 +1,82 @@
-﻿using System.Security.Claims;
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using TradingAudit.Server.Data;
-using TradingAudit.Server.Entities;
-using TradingAudit.Shared;
+using TradingAudit.Server.Entities; // Або де в тебе лежить UserImage
+using TradingAudit.Server.Services; // Наш новий сервіс
+using TradingAudit.Shared; // DTO
+using System.Security.Claims;
 
 namespace TradingAudit.Server.Controllers;
 
-[Route("api/[controller]")]
+[Authorize]
 [ApiController]
-[Authorize] // Тільки для авторизованих
+[Route("api/[controller]")]
 public class UserImagesController : ControllerBase
 {
     private readonly ApplicationDbContext _context;
-    private readonly IWebHostEnvironment _environment;
+    private readonly IBlobService _blobService; // <--- Додали
 
-    // Primary Constructor
-    public UserImagesController(ApplicationDbContext context, IWebHostEnvironment environment)
+    public UserImagesController(ApplicationDbContext context, IBlobService blobService)
     {
         _context = context;
-        _environment = environment;
+        _blobService = blobService;
     }
 
-    // GET: api/UserImages
     [HttpGet]
     public async Task<ActionResult<List<UserImageDto>>> GetAll()
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
-        // Вибираємо тільки картинки поточного користувача
-        var images = await _context.UserImages
-            .AsNoTracking()
+        return await _context.UserImages
             .Where(x => x.UserId == userId)
             .Select(x => new UserImageDto
             {
                 Id = x.Id,
-                Name = x.Name,
-                Url = x.Url
+                Url = x.Url,
+                Name = x.Name
             })
             .ToListAsync();
-
-        return Ok(images);
     }
 
-    // POST: api/UserImages
     [HttpPost]
     public async Task<ActionResult<UserImageDto>> Upload([FromForm] string name, [FromForm] IFormFile file)
     {
-        if (file == null || file.Length == 0)
-            return BadRequest("Файл не обрано.");
+        if (file == null || file.Length == 0) return BadRequest("File is empty");
 
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (userId == null) return Unauthorized();
 
-        // 1. Генеруємо унікальне ім'я файлу
-        var ext = Path.GetExtension(file.FileName);
-        var fileName = $"{Guid.NewGuid()}{ext}";
+        // 1. Завантажуємо в Azure Blob Storage
+        using var stream = file.OpenReadStream();
+        var fileUrl = await _blobService.UploadAsync(stream, file.FileName, file.ContentType);
 
-        // 2. Визначаємо шлях збереження (wwwroot/uploads)
-        var uploadPath = Path.Combine(_environment.WebRootPath, "uploads");
-        if (!Directory.Exists(uploadPath)) Directory.CreateDirectory(uploadPath);
-
-        var filePath = Path.Combine(uploadPath, fileName);
-
-        // 3. Зберігаємо файл фізично
-        using (var stream = new FileStream(filePath, FileMode.Create))
+        // 2. Зберігаємо запис в БД
+        var userImage = new UserImage
         {
-            await file.CopyToAsync(stream);
-        }
-
-        // 4. Формуємо URL (відносний шлях)
-        // Для Azure тут буде повний URL блоба
-        var fileUrl = $"/uploads/{fileName}";
-
-        // 5. Зберігаємо запис в БД
-        var entity = new UserImage
-        {
-            Id = Guid.NewGuid(),
+            UserId = userId,
             Name = name,
-            Url = fileUrl,
-            UserId = userId
+            Url = fileUrl // Тепер тут посилання на azurewebsites...
         };
 
-        _context.UserImages.Add(entity);
+        _context.UserImages.Add(userImage);
         await _context.SaveChangesAsync();
 
-        // 6. Повертаємо DTO
-        var dto = new UserImageDto
-        {
-            Id = entity.Id,
-            Name = entity.Name,
-            Url = entity.Url
-        };
-
-        return Ok(dto);
+        return Ok(new UserImageDto { Id = userImage.Id, Name = userImage.Name, Url = userImage.Url });
     }
 
-    // DELETE: api/UserImages/{id}
     [HttpDelete("{id}")]
     public async Task<IActionResult> Delete(Guid id)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var image = await _context.UserImages.FirstOrDefaultAsync(x => x.Id == id && x.UserId == userId);
 
-        // Шукаємо картинку, яка належить саме цьому юзеру
-        var entity = await _context.UserImages
-            .FirstOrDefaultAsync(x => x.Id == id && x.UserId == userId);
+        if (image == null) return NotFound();
 
-        if (entity == null)
-            return NotFound();
-
-        // 1. Видаляємо файл фізично (якщо це локальний файл)
-        // Увага: цей код специфічний для локального зберігання
-        try
-        {
-            var fileName = Path.GetFileName(entity.Url);
-            var filePath = Path.Combine(_environment.WebRootPath, "uploads", fileName);
-            if (System.IO.File.Exists(filePath))
-            {
-                System.IO.File.Delete(filePath);
-            }
-        }
-        catch (Exception ex)
-        {
-            // Логування помилки видалення файлу, але запис з БД все одно видаляємо
-            Console.WriteLine($"Error deleting file: {ex.Message}");
-        }
+        // 1. Видаляємо з хмари
+        await _blobService.DeleteAsync(image.Url);
 
         // 2. Видаляємо з БД
-        _context.UserImages.Remove(entity);
+        _context.UserImages.Remove(image);
         await _context.SaveChangesAsync();
 
         return NoContent();
