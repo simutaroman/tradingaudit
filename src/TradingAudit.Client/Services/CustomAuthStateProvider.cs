@@ -19,25 +19,42 @@ public class CustomAuthStateProvider : AuthenticationStateProvider
 
     public override async Task<AuthenticationState> GetAuthenticationStateAsync()
     {
-        // Читаємо токен
         var token = await _localStorage.GetItemAsync<string>("authToken");
 
+        // 1. Якщо токена немає - анонім
         if (string.IsNullOrWhiteSpace(token))
         {
-            return new AuthenticationState(new ClaimsPrincipal(new ClaimsIdentity()));
+            return GenerateAnonymous();
         }
 
-        // Вставляємо токен в Header для майбутніх запитів
-        _http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        // 2. Парсимо claims
+        var claims = ParseClaimsFromJwt(token);
 
-        // Парсимо токен, щоб дістати ім'я, ID тощо
-        var identity = new ClaimsIdentity(ParseClaimsFromJwt(token), "jwt");
+        // 3. ПЕРЕВІРКА: Чи не прострочився токен?
+        // Шукаємо claim "exp" (expiration time)
+        var expClaim = claims.FirstOrDefault(c => c.Type == "exp");
+        if (expClaim != null)
+        {
+            var expValue = long.Parse(expClaim.Value);
+            var expDate = DateTimeOffset.FromUnixTimeSeconds(expValue).UtcDateTime;
+
+            if (expDate <= DateTime.UtcNow)
+            {
+                // Токен прострочений!
+                await _localStorage.RemoveItemAsync("authToken"); // Видаляємо сміття
+                return GenerateAnonymous(); // Повертаємо стан аноніма
+            }
+        }
+
+        // 4. Якщо все ок - встановлюємо токен в хедер і повертаємо юзера
+        //_http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var identity = new ClaimsIdentity(claims, "jwt");
         var user = new ClaimsPrincipal(identity);
 
         return new AuthenticationState(user);
     }
 
-    // Викликаємо це при логіні
     public void NotifyUserAuthentication(string token)
     {
         var authenticatedUser = new ClaimsPrincipal(new ClaimsIdentity(ParseClaimsFromJwt(token), "jwt"));
@@ -45,31 +62,33 @@ public class CustomAuthStateProvider : AuthenticationStateProvider
         NotifyAuthenticationStateChanged(authState);
     }
 
-    // Викликаємо це при логауті
     public void NotifyUserLogout()
     {
-        var anonymousUser = new ClaimsPrincipal(new ClaimsIdentity());
-        var authState = Task.FromResult(new AuthenticationState(anonymousUser));
+        var authState = Task.FromResult(GenerateAnonymous());
         NotifyAuthenticationStateChanged(authState);
     }
 
-    // Магія парсингу JWT (Base64 -> Claims)
+    // Допоміжний метод для створення анонімного стану
+    private AuthenticationState GenerateAnonymous()
+    {
+        //_http.DefaultRequestHeaders.Authorization = null; // Прибираємо токен з хедерів
+        return new AuthenticationState(new ClaimsPrincipal(new ClaimsIdentity()));
+    }
+
     private IEnumerable<Claim> ParseClaimsFromJwt(string jwt)
     {
-        // 1. Перевірка на пустий рядок
-        if (string.IsNullOrEmpty(jwt))
-            return new List<Claim>();
+        if (string.IsNullOrEmpty(jwt)) return new List<Claim>();
 
-        // 2. Перевірка на структуру JWT (має бути мінімум 2 крапки)
         var parts = jwt.Split('.');
-        if (parts.Length < 2)
-            return new List<Claim>(); // Повертаємо пустий список замість Exception
+        if (parts.Length < 2) return new List<Claim>();
 
         var payload = parts[1];
         var jsonBytes = ParseBase64WithoutPadding(payload);
         var keyValuePairs = JsonSerializer.Deserialize<Dictionary<string, object>>(jsonBytes);
 
-        return keyValuePairs!.Select(kvp => new Claim(kvp.Key, kvp.Value.ToString()!));
+        if (keyValuePairs == null) return new List<Claim>();
+
+        return keyValuePairs.Select(kvp => new Claim(kvp.Key, kvp.Value.ToString()!));
     }
 
     private byte[] ParseBase64WithoutPadding(string base64)
