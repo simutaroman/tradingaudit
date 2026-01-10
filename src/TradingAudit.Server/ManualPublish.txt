@@ -1,0 +1,25 @@
+﻿перед публікацією 
+1 закрити студію та повидаляти bin та obj папки в усіх проектах рішення
+2 застосувати "prepublish" stash або вручну (див нижче)
+3 перемкнутись в Release, зробити білд
+4 опублікувати проект TradingAudit.Server
+
+
+зміни, які потрібно застосувати перед публікацією (крок 2):
+- в launchSettings.json
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Production"
+      }
+- в index.html
+    <script src="_framework/blazor.webassembly.js"></script>
+- в TradingAudit.Server.csproj
+    <WasmFingerprintAssets>false</WasmFingerprintAssets>
+
+- в appsettings.json
+ "ConnectionStrings": {
+    "DefaultConnection": "connection string to azure db"
+  },
+  "AzureStorage": {
+    "BlobConnectionString": "connection string to blob",
+    "ContainerName": "images"
+  },
