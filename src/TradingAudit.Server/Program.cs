@@ -2,6 +2,7 @@
 using Microsoft.EntityFrameworkCore;
 using Scalar.AspNetCore;
 using TradingAudit.Server.Data;
+using TradingAudit.Server.Entities;
 using TradingAudit.Server.Services;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -16,7 +17,7 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
 // 2. Auth & Identity
 builder.Services.AddAuthorization();
 
-builder.Services.AddIdentityApiEndpoints<IdentityUser>()
+builder.Services.AddIdentityApiEndpoints<ApplicationUser>()
     .AddEntityFrameworkStores<ApplicationDbContext>();
 
 // 3. Web API Services
@@ -68,7 +69,7 @@ app.UseAuthorization();
 app.MapControllers();
 
 // 5. Identity Endpoints
-app.MapGroup("/api/identity").MapIdentityApi<IdentityUser>();
+app.MapGroup("/api/identity").MapIdentityApi<ApplicationUser>();
 
 // 6. Fallback to Blazor
 app.MapFallbackToFile("index.html");

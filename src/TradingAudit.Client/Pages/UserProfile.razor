@@ -1,0 +1,107 @@
+﻿@page "/profile"
+@using TradingAudit.Shared
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+
+<PageTitle>Мій профіль</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Small" Class="mt-8">
+    <MudPaper Class="pa-8">
+        <MudText Typo="Typo.h4" GutterBottom="true">Мій кабінет</MudText>
+
+        @if (_isLoading)
+        {
+            <MudProgressCircular Indeterminate="true" Color="Color.Primary" />
+        }
+        else
+        {
+            <MudForm @ref="_form" @bind-IsValid="_success">
+
+                <MudTextField T="string"
+                              Label="Email"
+                              Value="@_model.Email"
+                              ReadOnly="true"
+                              Variant="Variant.Filled"
+                              Adornment="Adornment.End"
+                              AdornmentIcon="@(_model.IsEmailConfirmed ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.Warning)"
+                              AdornmentColor="@(_model.IsEmailConfirmed ? Color.Success : Color.Warning)"
+                              HelperText="@(_model.IsEmailConfirmed ? "Підтверджено" : "Не підтверджено")"
+                              Class="mb-4" />
+
+                <MudTextField T="string"
+                              Label="Нікнейм"
+                              @bind-Value="_model.Nickname"
+                              Required="true"
+                              RequiredError="Нікнейм обов'язковий"
+                              Variant="Variant.Outlined"
+                              Class="mb-4" />
+
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           Disabled="@(!_success || _isSaving)"
+                           OnClick="SaveChanges">
+                    @if (_isSaving)
+                    {
+                        <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
+                        <MudText Class="ms-2">Збереження...</MudText>
+                    }
+                    else
+                    {
+                        <MudText>Зберегти зміни</MudText>
+                    }
+                </MudButton>
+            </MudForm>
+        }
+    </MudPaper>
+</MudContainer>
+
+@code {
+    private UserProfileDto _model = new();
+    private bool _isLoading = true;
+    private bool _isSaving = false;
+    private bool _success;
+    private MudForm _form;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _model = await Http.GetFromJsonAsync<UserProfileDto>("api/profile") ?? new();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add("Не вдалося завантажити профіль", Severity.Error);
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task SaveChanges()
+    {
+        _isSaving = true;
+        try
+        {
+            var response = await Http.PutAsJsonAsync("api/profile", _model);
+            if (response.IsSuccessStatusCode)
+            {
+                Snackbar.Add("Профіль оновлено!", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add("Помилка при збереженні", Severity.Error);
+            }
+        }
+        catch (Exception)
+        {
+            Snackbar.Add("Помилка з'єднання", Severity.Error);
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+}

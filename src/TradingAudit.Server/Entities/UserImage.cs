@@ -8,9 +8,7 @@ public class UserImage
     public string Name { get; set; } = string.Empty;
     public string Url { get; set; } = string.Empty;
 
-    // Зовнішній ключ
     public string UserId { get; set; } = string.Empty;
 
-    // Навігаційна властивість (опціонально, але зручно для EF)
-    public virtual IdentityUser? User { get; set; }
+    public virtual ApplicationUser? User { get; set; }
 }

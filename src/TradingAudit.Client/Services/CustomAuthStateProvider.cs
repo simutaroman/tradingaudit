@@ -1,8 +1,9 @@
 ﻿using System.Net.Http.Headers;
+using System.Net.Http.Json;
 using System.Security.Claims;
-using System.Text.Json;
 using Blazored.LocalStorage;
 using Microsoft.AspNetCore.Components.Authorization;
+using TradingAudit.Shared; // Твоя DTO
 
 namespace TradingAudit.Client.Services;
 
@@ -10,6 +11,10 @@ public class CustomAuthStateProvider : AuthenticationStateProvider
 {
     private readonly ILocalStorageService _localStorage;
     private readonly HttpClient _http;
+    private const string AuthTokenKey = "authToken";
+
+    // Кешуємо профіль, щоб не смикати API при кожному кліку
+    private UserProfileDto? _cachedProfile;
 
     public CustomAuthStateProvider(ILocalStorageService localStorage, HttpClient http)
     {
@@ -19,85 +24,78 @@ public class CustomAuthStateProvider : AuthenticationStateProvider
 
     public override async Task<AuthenticationState> GetAuthenticationStateAsync()
     {
-        var token = await _localStorage.GetItemAsync<string>("authToken");
+        // 1. Беремо токен
+        var token = await _localStorage.GetItemAsync<string>(AuthTokenKey);
 
-        // 1. Якщо токена немає - анонім
         if (string.IsNullOrWhiteSpace(token))
         {
             return GenerateAnonymous();
         }
 
-        // 2. Парсимо claims
-        var claims = ParseClaimsFromJwt(token);
+        // 2. Встановлюємо токен в хедер (щоб мати доступ до захищених ресурсів)
+        _http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
-        // 3. ПЕРЕВІРКА: Чи не прострочився токен?
-        // Шукаємо claim "exp" (expiration time)
-        var expClaim = claims.FirstOrDefault(c => c.Type == "exp");
-        if (expClaim != null)
+        try
         {
-            var expValue = long.Parse(expClaim.Value);
-            var expDate = DateTimeOffset.FromUnixTimeSeconds(expValue).UtcDateTime;
-
-            if (expDate <= DateTime.UtcNow)
+            // 3. Якщо у нас ще немає даних профілю - завантажуємо їх з сервера
+            if (_cachedProfile == null)
             {
-                // Токен прострочений!
-                await _localStorage.RemoveItemAsync("authToken"); // Видаляємо сміття
-                return GenerateAnonymous(); // Повертаємо стан аноніма
+                // Цей запит пройде, бо ми вже встановили Header вище
+                _cachedProfile = await _http.GetFromJsonAsync<UserProfileDto>("api/profile");
+            }
+
+            if (_cachedProfile != null)
+            {
+                var claims = new List<Claim>
+                {
+                    new Claim(ClaimTypes.Name, _cachedProfile.Nickname ?? _cachedProfile.Email),
+                    new Claim(ClaimTypes.Email, _cachedProfile.Email)
+                };
+
+                // Додаємо роль, якщо треба (можна розширити DTO)
+                // if (_cachedProfile.IsAdmin) claims.Add(new Claim(ClaimTypes.Role, "Admin"));
+
+                var identity = new ClaimsIdentity(claims, "Bearer");
+                var user = new ClaimsPrincipal(identity);
+
+                return new AuthenticationState(user);
             }
         }
+        catch (Exception)
+        {
+            // Якщо токен протух або сервер повернув 401
+            await _localStorage.RemoveItemAsync(AuthTokenKey);
+            _cachedProfile = null;
+        }
 
-        // 4. Якщо все ок - встановлюємо токен в хедер і повертаємо юзера
-        //_http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
-
-        var identity = new ClaimsIdentity(claims, "jwt");
-        var user = new ClaimsPrincipal(identity);
-
-        return new AuthenticationState(user);
+        return GenerateAnonymous();
     }
 
-    public void NotifyUserAuthentication(string token)
+    public async Task NotifyUserAuthentication(string token)
     {
-        var authenticatedUser = new ClaimsPrincipal(new ClaimsIdentity(ParseClaimsFromJwt(token), "jwt"));
-        var authState = Task.FromResult(new AuthenticationState(authenticatedUser));
-        NotifyAuthenticationStateChanged(authState);
+        await _localStorage.SetItemAsync(AuthTokenKey, token);
+        _http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        // Скидаємо кеш, щоб завантажити свіжі дані
+        _cachedProfile = null;
+
+        // Викликаємо оновлення стану (це запустить GetAuthenticationStateAsync)
+        NotifyAuthenticationStateChanged(GetAuthenticationStateAsync());
     }
 
-    public void NotifyUserLogout()
+    public async Task NotifyUserLogout()
     {
+        await _localStorage.RemoveItemAsync(AuthTokenKey);
+        _http.DefaultRequestHeaders.Authorization = null;
+        _cachedProfile = null;
+
         var authState = Task.FromResult(GenerateAnonymous());
         NotifyAuthenticationStateChanged(authState);
     }
 
-    // Допоміжний метод для створення анонімного стану
     private AuthenticationState GenerateAnonymous()
     {
-        //_http.DefaultRequestHeaders.Authorization = null; // Прибираємо токен з хедерів
+        _http.DefaultRequestHeaders.Authorization = null;
         return new AuthenticationState(new ClaimsPrincipal(new ClaimsIdentity()));
-    }
-
-    private IEnumerable<Claim> ParseClaimsFromJwt(string jwt)
-    {
-        if (string.IsNullOrEmpty(jwt)) return new List<Claim>();
-
-        var parts = jwt.Split('.');
-        if (parts.Length < 2) return new List<Claim>();
-
-        var payload = parts[1];
-        var jsonBytes = ParseBase64WithoutPadding(payload);
-        var keyValuePairs = JsonSerializer.Deserialize<Dictionary<string, object>>(jsonBytes);
-
-        if (keyValuePairs == null) return new List<Claim>();
-
-        return keyValuePairs.Select(kvp => new Claim(kvp.Key, kvp.Value.ToString()!));
-    }
-
-    private byte[] ParseBase64WithoutPadding(string base64)
-    {
-        switch (base64.Length % 4)
-        {
-            case 2: base64 += "=="; break;
-            case 3: base64 += "="; break;
-        }
-        return Convert.FromBase64String(base64);
     }
 }
