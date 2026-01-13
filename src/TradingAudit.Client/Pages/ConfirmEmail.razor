@@ -1,0 +1,68 @@
+﻿@page "/confirm-email"
+@inject HttpClient Http
+@inject NavigationManager Navigation
+
+<MudContainer MaxWidth="MaxWidth.Small" Class="mt-16">
+    <MudPaper Class="pa-8 text-center">
+        @if (_isLoading)
+        {
+            <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" Class="mb-4" />
+            <MudText Typo="Typo.h5">Перевіряємо ваш email...</MudText>
+        }
+        else if (_isSuccess)
+        {
+            <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Size="Size.Large" Style="width: 100px; height: 100px;" Class="mb-4" />
+            <MudText Typo="Typo.h4" Color="Color.Success" GutterBottom="true">Успіх!</MudText>
+            <MudText Class="mb-6">Ваш email успішно підтверджено.</MudText>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Link="/login">Увійти в акаунт</MudButton>
+        }
+        else
+        {
+            <MudIcon Icon="@Icons.Material.Filled.Error" Color="Color.Error" Size="Size.Large" Style="width: 100px; height: 100px;" Class="mb-4" />
+            <MudText Typo="Typo.h4" Color="Color.Error" GutterBottom="true">Помилка</MudText>
+            <MudText Class="mb-6">Не вдалося підтвердити email.</MudText>
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" Link="/">На головну</MudButton>
+        }
+    </MudPaper>
+</MudContainer>
+
+@code {
+    private bool _isLoading = true;
+    private bool _isSuccess = false;
+
+    // 🔥 МАГІЯ ТУТ:
+    // Цей атрибут каже Blazor-у: "Візьми значення з URL ?userId=... і поклади в цю змінну"
+    [SupplyParameterFromQuery]
+    public string? UserId { get; set; }
+
+    // А тут він сам візьме ?code=... і навіть розкодує спецсимволи
+    [SupplyParameterFromQuery]
+    public string? Code { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Чекаємо трохи, щоб параметри точно проініціалізувалися
+        if (string.IsNullOrEmpty(UserId) || string.IsNullOrEmpty(Code))
+        {
+            _isSuccess = false;
+            _isLoading = false;
+            return;
+        }
+
+        try
+        {
+            var encodedCode = System.Net.WebUtility.UrlEncode(Code);
+            var response = await Http.GetAsync($"api/identity/confirmEmail?userId={UserId}&code={encodedCode}");
+            _isSuccess = response.IsSuccessStatusCode ;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error: {ex.Message}");
+            _isSuccess = false;
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+}

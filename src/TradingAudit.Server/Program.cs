@@ -20,6 +20,8 @@ builder.Services.AddAuthorization();
 builder.Services.AddIdentityApiEndpoints<ApplicationUser>()
     .AddEntityFrameworkStores<ApplicationDbContext>();
 
+builder.Services.AddTransient<IEmailSender<ApplicationUser>, AzureEmailSender>();
+
 // 3. Web API Services
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
