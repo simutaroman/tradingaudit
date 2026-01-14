@@ -66,4 +66,24 @@ public class AuthService : IAuthService
         [JsonPropertyName("refreshToken")]
         public string RefreshToken { get; set; } = string.Empty;
     }
+
+    public async Task<bool> ForgotPasswordAsync(string email)
+    {
+        var result = await _httpClient.PostAsJsonAsync("api/identity/forgotPassword", new { email });
+        return result.IsSuccessStatusCode;
+    }
+
+    public async Task<bool> ResetPasswordAsync(string email, string code, string newPassword)
+    {
+        var request = new
+        {
+            email = email,
+            resetCode = code,
+            newPassword = newPassword
+        };
+
+        var result = await _httpClient.PostAsJsonAsync("api/identity/resetPassword", request);
+
+        return result.IsSuccessStatusCode;
+    }
 }

@@ -59,15 +59,48 @@ public class AzureEmailSender : IEmailSender<ApplicationUser>
         await SendEmailAsync(email, "Підтвердження реєстрації", htmlContent);
     }
 
-    public async Task SendPasswordResetLinkAsync(ApplicationUser user, string email, string resetLink)
+    public Task SendPasswordResetLinkAsync(ApplicationUser user, string email, string resetLink)
     {
-        var htmlContent = $"<a href='{resetLink}'>Натисни тут для скидання пароля</a>";
-        await SendEmailAsync(email, "Скидання пароля", htmlContent);
+        return Task.CompletedTask;
     }
 
     public async Task SendPasswordResetCodeAsync(ApplicationUser user, string email, string resetCode)
     {
-        await SendEmailAsync(email, "Код скидання пароля", $"Ваш код: {resetCode}");
+        var clientBaseUrl = _configuration["ClientApp:BaseUrl"];
+
+        // ВАЖЛИВО: MapIdentityApi передає сюди код вже HTML-encoded (наприклад, & -> &amp;).
+        // Спочатку очищуємо його.
+        var cleanCode = System.Net.WebUtility.HtmlDecode(resetCode);
+
+        // Тепер формуємо посилання. 
+        // Оскільки ми вставляємо код в URL, його треба UrlEncode (щоб + став %2B).
+        var encodedCode = System.Net.WebUtility.UrlEncode(cleanCode);
+
+        // Формуємо лінк на твій Blazor Client
+        var resetLink = $"{clientBaseUrl}/reset-password?email={email}&code={encodedCode}";
+
+        var htmlContent = $@"
+        <html>
+            <body style='font-family: Arial, sans-serif;'>
+                <div style='background-color: #f4f4f4; padding: 20px;'>
+                    <div style='max-width: 600px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px;'>
+                        <h2 style='color: #d32f2f;'>Відновлення пароля</h2>
+                        <p>Привіт, {user.Nickname}!</p>
+                        <p>Ваш код для скидання: <b>{cleanCode}</b></p>
+                        <p>Або просто натисніть кнопку нижче:</p>
+                        
+                        <div style='text-align: center; margin: 30px 0;'>
+                            <a href='{resetLink}' style='padding: 12px 24px; background-color: #d32f2f; color: white; text-decoration: none; border-radius: 4px; font-weight: bold;'>Скинути пароль</a>
+                        </div>
+                        
+                        <p style='color: #999; font-size: 12px;'>Якщо кнопка не працює, перейдіть за посиланням:</p>
+                        <p style='color: #999; font-size: 10px; word-break: break-all;'>{resetLink}</p>
+                    </div>
+                </div>
+            </body>
+        </html>";
+
+        await SendEmailAsync(email, "Скидання пароля", htmlContent);
     }
 
     private async Task SendEmailAsync(string toEmail, string subject, string htmlContent)

@@ -7,4 +7,6 @@ public interface IAuthService
     Task<string?> Login(string email, string password);
     Task Register(string email, string password);
     Task Logout();
+    Task<bool> ForgotPasswordAsync(string email);
+    Task<bool> ResetPasswordAsync(string email, string code, string newPassword);
 }
