@@ -4,6 +4,8 @@ using Scalar.AspNetCore;
 using TradingAudit.Server.Data;
 using TradingAudit.Server.Entities;
 using TradingAudit.Server.Services;
+using TradingAudit.Shared.Constants;
+using TradingAudit.Shared.Enums;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -19,7 +21,53 @@ builder.Services.AddAuthorization();
 
 builder.Services.AddIdentityApiEndpoints<ApplicationUser>()
     .AddRoles<IdentityRole>()
-    .AddEntityFrameworkStores<ApplicationDbContext>();
+    .AddEntityFrameworkStores<ApplicationDbContext>()
+    .AddClaimsPrincipalFactory<CustomClaimsPrincipalFactory>(); ;
+
+builder.Services.AddAuthorization(options =>
+{
+    // 1. Політика: Хто може завантажувати картинки?
+    // Логіка: Рівень >= Standard АБО це Адмін. (Support тільки читає, тому ні)
+    options.AddPolicy(PolicyNames.CanUploadImages, policy =>
+        policy.RequireAssertion(context =>
+        {
+            var user = context.User;
+            // Якщо Адмін - можна
+            if (user.IsInRole("Admin")) return true;
+
+            // Шукаємо клейм підписки
+            var tierClaim = user.FindFirst("subscription_tier");
+            if (tierClaim != null && int.TryParse(tierClaim.Value, out int tierValue))
+            {
+                // Перевіряємо чи рівень >= Standard (1)
+                return tierValue >= (int)SubscriptionTier.Standard;
+            }
+
+            return false;
+        }));
+
+    // 2. Політика: Хто може експортувати в Excel?
+    // Логіка: Рівень >= Pro АБО Адмін АБО Сапорт (їм треба для звітів)
+    options.AddPolicy(PolicyNames.CanExportData, policy =>
+        policy.RequireAssertion(context =>
+        {
+            if (context.User.IsInRole("Admin") || context.User.IsInRole("Support")) return true;
+
+            var tierClaim = context.User.FindFirst("subscription_tier");
+            if (tierClaim != null && int.TryParse(tierClaim.Value, out int tierValue))
+            {
+                return tierValue >= (int)SubscriptionTier.Pro;
+            }
+            return false;
+        }));
+
+    // 3. Політика: Хто має право на ЗАПИС (Create/Update/Delete)?
+    // Логіка: Всі крім Support.
+    options.AddPolicy(PolicyNames.RequireWriteAccess, policy =>
+        policy.RequireAssertion(context =>
+            !context.User.IsInRole("Support") // Сапорту заборонено
+        ));
+});
 
 builder.Services.AddTransient<IEmailSender<ApplicationUser>, AzureEmailSender>();
 

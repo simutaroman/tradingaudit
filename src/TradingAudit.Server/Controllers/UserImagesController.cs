@@ -1,11 +1,12 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using TradingAudit.Server.Data;
-using TradingAudit.Server.Entities; // Або де в тебе лежить UserImage
-using TradingAudit.Server.Services; // Наш новий сервіс
-using TradingAudit.Shared; // DTO
 using System.Security.Claims;
+using TradingAudit.Server.Data;
+using TradingAudit.Server.Entities;
+using TradingAudit.Server.Services;
+using TradingAudit.Shared;
+using TradingAudit.Shared.Constants;
 
 namespace TradingAudit.Server.Controllers;
 
@@ -15,7 +16,7 @@ namespace TradingAudit.Server.Controllers;
 public class UserImagesController : ControllerBase
 {
     private readonly ApplicationDbContext _context;
-    private readonly IBlobService _blobService; // <--- Додали
+    private readonly IBlobService _blobService;
 
     public UserImagesController(ApplicationDbContext context, IBlobService blobService)
     {
@@ -40,6 +41,7 @@ public class UserImagesController : ControllerBase
     }
 
     [HttpPost]
+    [Authorize(Policy = PolicyNames.CanUploadImages)]
     public async Task<ActionResult<UserImageDto>> Upload([FromForm] string name, [FromForm] IFormFile file)
     {
         if (file == null || file.Length == 0) return BadRequest("File is empty");
@@ -65,6 +67,7 @@ public class UserImagesController : ControllerBase
     }
 
     [HttpDelete("{id}")]
+    [Authorize(Policy = PolicyNames.CanUploadImages)]
     public async Task<IActionResult> Delete(Guid id)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -72,10 +75,8 @@ public class UserImagesController : ControllerBase
 
         if (image == null) return NotFound();
 
-        // 1. Видаляємо з хмари
         await _blobService.DeleteAsync(image.Url);
 
-        // 2. Видаляємо з БД
         _context.UserImages.Remove(image);
         await _context.SaveChangesAsync();
 
