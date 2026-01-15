@@ -1,0 +1,342 @@
+﻿@page "/strategies/create"
+@page "/strategies/edit/{Id:guid}"
+
+@using TradingAudit.Shared.DTOs.Strategies
+@using TradingAudit.Shared.Enums
+@using TradingAudit.Shared
+@using TradingAudit.Client.Services
+@using System.Net.Http.Headers
+
+@inject IStrategyService StrategyService
+@inject HttpClient Http
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-8 mb-16">
+    <MudText Typo="Typo.h4" GutterBottom="true">
+        @(IsEditMode ? $"Редагування: {_model.Name} (v.{_model.Version})" : "Нова Стратегія")
+    </MudText>
+
+    @if (_isLoading)
+    {
+        <div class="d-flex justify-center mt-8">
+            <MudProgressCircular Indeterminate="true" Color="Color.Primary" />
+        </div>
+    }
+    else
+    {
+        <MudForm @ref="_form" @bind-IsValid="_success">
+            <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-6">
+
+                <MudTabPanel Text="Загальні налаштування" Icon="@Icons.Material.Filled.Settings">
+                    <MudGrid>
+                        <MudItem xs="12" md="8">
+                            <MudTextField @bind-Value="_model.Name" Label="Назва стратегії" Required="true" Variant="Variant.Outlined" />
+                            <MudTextField @bind-Value="_model.Description" Label="Опис логіки" Lines="3" Variant="Variant.Outlined" Class="mt-4" />
+
+                            <div class="d-flex gap-4 mt-4">
+                                <MudNumericField @bind-Value="_model.DefaultRiskAmount" Label="Default Risk ($)" Format="F2" Variant="Variant.Outlined" />
+                                <MudNumericField @bind-Value="_model.MinRiskRewardRatio" Label="Min R:R (e.g. 2.0)" Format="F2" Variant="Variant.Outlined" />
+                            </div>
+
+                            <MudTextField @bind-Value="_model.Timeframes" Label="Таймфрейми (напр. 15m, 1h)" Class="mt-4" />
+                            <MudTextField @bind-Value="_model.AssetScope" Label="Активи (напр. BTC, ETH)" Class="mt-4" />
+                        </MudItem>
+
+                        <MudItem xs="12" md="4">
+                            <MudCard Outlined="true">
+                                <MudCardContent>
+                                    <MudText Typo="Typo.subtitle2" GutterBottom="true">Обкладинка</MudText>
+
+                                    @if (_model.ImageUrls.Any())
+                                    {
+                                        <MudImage Src="@_model.ImageUrls.First()"
+                                                  ObjectFit="ObjectFit.Cover"
+                                                  Height="200"
+                                                  Fluid="true"
+                                                  Class="rounded mb-2" />
+
+                                        <MudButton Variant="Variant.Outlined"
+                                                   Color="Color.Error"
+                                                   Size="Size.Small"
+                                                   FullWidth="true"
+                                                   OnClick="@(() => _model.ImageUrls.Clear())">
+                                            Видалити
+                                        </MudButton>
+                                    }
+                                    else
+                                    {
+                                        <div class="d-flex justify-center align-center border-dashed pa-4 rounded" style="height:200px; background:#f5f5f5;">
+                                            <MudIcon Icon="@Icons.Material.Filled.Image" Size="Size.Large" Color="Color.Default" />
+                                        </div>
+                                    }
+
+                                    <MudFileUpload T="IBrowserFile" FilesChanged="@(file => UploadStrategyImage(file))" Class="mt-3">
+                                        <ActivatorContent>
+                                            <MudButton Variant="Variant.Filled"
+                                                       Color="Color.Primary"
+                                                       StartIcon="@Icons.Material.Filled.CloudUpload"
+                                                       FullWidth="true">
+                                                Завантажити обкладинку
+                                            </MudButton>
+                                        </ActivatorContent>
+                                    </MudFileUpload>
+
+                                </MudCardContent>
+                            </MudCard>
+                        </MudItem>
+                    </MudGrid>
+                </MudTabPanel>
+
+                <MudTabPanel Text="Правила та Чек-лист" Icon="@Icons.Material.Filled.ListAlt">
+
+                    <MudText Typo="Typo.h6" Color="Color.Primary" Class="mt-2">Правила Входу (Entry)</MudText>
+                    <MudDivider Class="mb-4" />
+
+                    @foreach (var rule in _model.Rules.Where(r => r.Type == StrategyRuleType.Entry).OrderBy(r => r.OrderIndex))
+                    {
+                        <MudPaper Class="pa-4 mb-4" Elevation="2">
+                            <div class="d-flex gap-2 align-center">
+                                <MudCheckBox @bind-Value="rule.IsMandatory" Label="Обов'язкове" Color="Color.Error" Dense="true" />
+                                <MudSpacer />
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" OnClick="@(() => RemoveRule(rule))" />
+                            </div>
+
+                            <MudTextField @bind-Value="rule.Title" Label="Правило" Required="true" Variant="Variant.Text" />
+                            <MudTextField @bind-Value="rule.Description" Label="Пояснення" Lines="2" Variant="Variant.Text" />
+
+                            <div class="d-flex gap-2 mt-2 flex-wrap align-center">
+                                @foreach (var img in rule.ImageUrls)
+                                {
+                                    <MudImage Src="@img"
+                                              Height="60"
+                                              Width="60"
+                                              ObjectFit="ObjectFit.Cover"
+                                              Class="rounded border" />
+                                }
+
+                                <MudFileUpload T="IBrowserFile" FilesChanged="@(file => UploadRuleImage(file, rule))">
+                                    <ActivatorContent>
+                                        <MudIconButton Icon="@Icons.Material.Filled.AddPhotoAlternate"
+                                                       Color="Color.Secondary"
+                                                       Variant="Variant.Outlined" />
+                                    </ActivatorContent>
+                                </MudFileUpload>
+                            </div>
+                        </MudPaper>
+                    }
+                    <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => AddRule(StrategyRuleType.Entry))">Додати правило входу</MudButton>
+
+                    <MudText Typo="Typo.h6" Color="Color.Secondary" Class="mt-8">Правила Супроводу (Management)</MudText>
+                    <MudDivider Class="mb-4" />
+
+                    @foreach (var rule in _model.Rules.Where(r => r.Type == StrategyRuleType.Management).OrderBy(r => r.OrderIndex))
+                    {
+                        <MudPaper Class="pa-4 mb-4" Elevation="2">
+                            <div class="d-flex gap-2 align-center">
+                                <MudCheckBox @bind-Value="rule.IsMandatory" Label="Critical" Color="Color.Warning" Dense="true" />
+                                <MudSpacer />
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" OnClick="@(() => RemoveRule(rule))" />
+                            </div>
+                            <MudTextField @bind-Value="rule.Title" Label="Дія / Умова" Required="true" Variant="Variant.Text" />
+                            <MudTextField @bind-Value="rule.Description" Label="Опис" Variant="Variant.Text" />
+                        </MudPaper>
+                    }
+                    <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => AddRule(StrategyRuleType.Management))">Додати правило виходу</MudButton>
+
+                </MudTabPanel>
+            </MudTabs>
+
+            <div class="d-flex justify-end align-center mt-6 gap-4">
+
+                @if (IsEditMode)
+                {
+                    <MudCheckBox @bind-Value="_model.CreateNewVersion"
+                                 Label="Створити нову версію"
+                                 Color="Color.Secondary"
+                                 Disabled="@(!_model.IsActive)"
+                                 Dense="true"
+                                 Class="mr-4"
+                                 title="Виберіть, якщо ви суттєво змінили правила і хочете зберегти історію старої версії" />
+                }
+
+                <MudButton OnClick="Cancel" Variant="Variant.Text">Скасувати</MudButton>
+
+                <MudButton OnClick="Submit" Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!_success || _isSaving)">
+                    @if (_isSaving)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                    }
+                    @if (IsEditMode && _model.CreateNewVersion)
+                    {
+                        <text>Зберегти як нову (v.@(_model.Version + 1))</text>
+                    }
+                    else
+                    {
+                        <text>Зберегти</text>
+                    }
+                </MudButton>
+            </div>
+        </MudForm>
+    }
+</MudContainer>
+
+@code {
+    [Parameter] public Guid? Id { get; set; }
+
+    private TradingStrategyDto _model = new();
+    private bool IsEditMode => Id.HasValue;
+    private bool _isLoading = false;
+    private bool _isSaving = false;
+    private bool _success;
+    private MudForm _form;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (IsEditMode)
+        {
+            _isLoading = true;
+            var existing = await StrategyService.GetByIdAsync(Id.Value);
+            if (existing != null)
+            {
+                _model = existing;
+                // Якщо це архівна версія - примушуємо створювати нову
+                if (!_model.IsActive)
+                {
+                    _model.CreateNewVersion = true;
+                    Snackbar.Add("Це архівна версія. Збереження створить нову актуальну версію.", Severity.Info);
+                }
+            }
+            else
+            {
+                Snackbar.Add("Стратегію не знайдено", Severity.Error);
+                Navigation.NavigateTo("/strategies");
+            }
+            _isLoading = false;
+        }
+        else
+        {
+            _model.DefaultRiskAmount = 50;
+            _model.MinRiskRewardRatio = 2.0m;
+        }
+    }
+
+    // --- RULES LOGIC ---
+    private void AddRule(StrategyRuleType type)
+    {
+        var nextIndex = _model.Rules.Count > 0 ? _model.Rules.Max(r => r.OrderIndex) + 1 : 1;
+        _model.Rules.Add(new StrategyRuleDto
+        {
+            Type = type,
+            Title = "",
+            IsMandatory = true,
+            OrderIndex = nextIndex
+        });
+    }
+
+    private void RemoveRule(StrategyRuleDto rule)
+    {
+        _model.Rules.Remove(rule);
+    }
+
+    // --- IMAGE UPLOAD LOGIC ---
+    private async Task UploadStrategyImage(IBrowserFile file)
+    {
+        var url = await UploadFileToServer(file, "StrategyCover");
+        if (url != null)
+        {
+            _model.ImageUrls.Clear();
+            _model.ImageUrls.Add(url);
+            Snackbar.Add("Обкладинку завантажено", Severity.Success);
+        }
+    }
+
+    private async Task UploadRuleImage(IBrowserFile file, StrategyRuleDto rule)
+    {
+        var url = await UploadFileToServer(file, "RuleRef");
+        if (url != null)
+        {
+            rule.ImageUrls.Add(url);
+            // Примушуємо UI оновитися, щоб показати нову картинку
+            StateHasChanged();
+        }
+    }
+
+    private async Task<string?> UploadFileToServer(IBrowserFile file, string nameContext)
+    {
+        if (file.Size > 5 * 1024 * 1024)
+        {
+            Snackbar.Add("Файл занадто великий (макс 5Мб)", Severity.Warning);
+            return null;
+        }
+
+        try
+        {
+            using var content = new MultipartFormDataContent();
+            var fileContent = new StreamContent(file.OpenReadStream(maxAllowedSize: 5 * 1024 * 1024));
+            fileContent.Headers.ContentType = new MediaTypeHeaderValue(file.ContentType);
+
+            content.Add(content: fileContent, name: "\"file\"", fileName: file.Name);
+            content.Add(content: new StringContent(nameContext), name: "\"name\"");
+
+            // API: api/UserImages
+            var response = await Http.PostAsync("api/UserImages", content);
+
+            if (response.IsSuccessStatusCode)
+            {
+                // Очікуємо DTO: { "id": "...", "name": "...", "url": "..." }
+                var result = await response.Content.ReadFromJsonAsync<UserImageDto>();
+                return result?.Url;
+            }
+            else
+            {
+                Snackbar.Add("Помилка завантаження файлу", Severity.Error);
+                return null;
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Помилка: {ex.Message}", Severity.Error);
+            return null;
+        }
+    }
+
+    // --- SUBMIT LOGIC ---
+    private async Task Submit()
+    {
+        await _form.Validate();
+        if (!_form.IsValid) return;
+
+        _isSaving = true;
+        try
+        {
+            if (IsEditMode)
+            {
+                // Update поверне ID нової версії
+                await StrategyService.UpdateStrategyAsync(Id.Value, _model);
+                Snackbar.Add("Стратегію оновлено (створено нову версію)", Severity.Success);
+            }
+            else
+            {
+                await StrategyService.CreateStrategyAsync(_model);
+                Snackbar.Add("Стратегію створено", Severity.Success);
+            }
+
+            Navigation.NavigateTo("/strategies");
+        }
+        catch (Exception ex)
+        {
+            // Якщо сервер повернув "Free tier limit reached", тут ми це побачимо
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+
+    private void Cancel()
+    {
+        Navigation.NavigateTo("/strategies");
+    }
+}

@@ -1,9 +1,13 @@
-﻿using Microsoft.AspNetCore.Identity;
+﻿using Mapster;
+using MapsterMapper;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Scalar.AspNetCore;
+using System.Reflection;
 using TradingAudit.Server.Data;
 using TradingAudit.Server.Entities;
 using TradingAudit.Server.Services;
+using TradingAudit.Server.Services.Interfaces;
 using TradingAudit.Shared.Constants;
 using TradingAudit.Shared.Enums;
 
@@ -23,6 +27,16 @@ builder.Services.AddIdentityApiEndpoints<ApplicationUser>()
     .AddRoles<IdentityRole>()
     .AddEntityFrameworkStores<ApplicationDbContext>()
     .AddClaimsPrincipalFactory<CustomClaimsPrincipalFactory>(); ;
+
+// 1. Створюємо глобальний конфіг
+var config = TypeAdapterConfig.GlobalSettings;
+
+// 2. Скануємо збірку на наявність класів, що реалізують IRegister (наш StrategyMappingConfig)
+config.Scan(Assembly.GetExecutingAssembly());
+
+// 3. Реєструємо сервіс мапера (Singleton, бо конфіг не змінюється)
+builder.Services.AddSingleton(config);
+builder.Services.AddScoped<IMapper, ServiceMapper>();
 
 builder.Services.AddAuthorization(options =>
 {
@@ -78,6 +92,7 @@ builder.Services.AddEndpointsApiExplorer();
 // !! НОВИЙ OPEN API (Нативний) !!
 builder.Services.AddOpenApi();
 builder.Services.AddSingleton<IBlobService, BlobService>();
+builder.Services.AddScoped<IStrategyService, StrategyService>();
 
 var app = builder.Build();
 

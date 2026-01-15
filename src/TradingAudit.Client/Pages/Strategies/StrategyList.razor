@@ -1,0 +1,144 @@
+﻿@page "/strategies"
+@using TradingAudit.Client.Pages.Strategies.Components
+@using TradingAudit.Shared.DTOs.Strategies
+@using TradingAudit.Client.Services
+@inject IStrategyService StrategyService
+@inject NavigationManager Navigation
+
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-8">
+
+    <div class="d-flex justify-space-between align-center mb-6">
+        <MudText Typo="Typo.h4">Мої Стратегії</MudText>
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Add"
+                   OnClick="@(() => Navigation.NavigateTo("/strategies/create"))">
+            Нова Стратегія
+        </MudButton>
+    </div>
+
+    @if (_isLoading)
+    {
+        <div class="d-flex justify-center mt-16">
+            <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
+        </div>
+    }
+    else if (_strategies.Count == 0)
+    {
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-4">
+            У вас поки немає активних стратегій. Створіть першу, щоб почати системну торгівлю.
+        </MudAlert>
+    }
+    else
+    {
+        <MudGrid>
+            @foreach (var strategy in _strategies)
+            {
+                <MudItem xs="12" sm="6" md="4">
+                    <MudCard Elevation="3" Class="d-flex flex-column" Style="height: 100%;">
+
+                        @if (strategy.ImageUrls.Any())
+                        {
+                            <MudCardMedia Image="@strategy.ImageUrls.First()" Height="140" />
+                        }
+                        else
+                        {
+                            <MudCardMedia Image="images/strategy-placeholder.jpg" Height="140" Title="No Image" />
+                        }
+
+                        <MudCardContent Class="flex-grow-1">
+                            <div class="d-flex justify-space-between">
+                                <MudText Typo="Typo.h6">@strategy.Name</MudText>
+                                <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined">v.@strategy.Version</MudChip>
+                            </div>
+
+                            <MudText Typo="Typo.body2" Class="mt-2 text-secondary">
+                                @Truncate(strategy.Description, 100)
+                            </MudText>
+
+                            <MudDivider Class="my-3" />
+
+                            <div class="d-flex gap-4">
+                                <div>
+                                    <MudText Typo="Typo.caption">Risk ($)</MudText>
+                                    <MudText Typo="Typo.body2"><b>$@strategy.DefaultRiskAmount</b></MudText>
+                                </div>
+                                <div>
+                                    <MudText Typo="Typo.caption">Min R:R</MudText>
+                                    <MudText Typo="Typo.body2"><b>1:@strategy.MinRiskRewardRatio</b></MudText>
+                                </div>
+                            </div>
+                        </MudCardContent>
+
+                        <MudCardActions>
+                            <MudButton Variant="Variant.Text" Color="Color.Primary"
+                                       OnClick="@(() => OpenDetails(strategy.Id))">
+                                Деталі
+                            </MudButton>
+                            <MudSpacer />
+                            <MudTooltip Text="Історія версій">
+                                <MudIconButton Icon="@Icons.Material.Filled.History"
+                                               OnClick="@(() => ShowHistory(strategy.GroupId))"
+                                               Color="Color.Default" />
+                            </MudTooltip>
+                            @if (strategy.IsActive)
+                            {
+                                <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Size="Size.Small" Title="Active" />
+                            }
+                        </MudCardActions>
+                    </MudCard>
+                </MudItem>
+            }
+        </MudGrid>
+    }
+
+</MudContainer>
+
+@code {
+    [Inject] IDialogService DialogService { get; set; }
+    private List<TradingStrategyDto> _strategies = new();
+    private bool _isLoading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _strategies = await StrategyService.GetStrategiesAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error fetching strategies: {ex.Message}");
+            // Тут можна додати Snackbar з помилкою
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private void OpenDetails(Guid? id)
+    {
+        if (id.HasValue)
+        {
+            Navigation.NavigateTo($"/strategies/edit/{id}");
+        }
+    }
+
+    // Хелпер для обрізання довгих описів
+    private string Truncate(string value, int maxLength)
+    {
+        if (string.IsNullOrEmpty(value)) return string.Empty;
+        return value.Length <= maxLength ? value : value.Substring(0, maxLength) + "...";
+    }
+
+    private void ShowHistory(Guid? groupId)
+    {
+        if (groupId == null) return;
+
+        var parameters = new DialogParameters { ["GroupId"] = groupId.Value };
+        var options = new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Small, FullWidth = true };
+
+        DialogService.Show<HistoryDialog>("Історія змін", parameters, options);
+    }
+}

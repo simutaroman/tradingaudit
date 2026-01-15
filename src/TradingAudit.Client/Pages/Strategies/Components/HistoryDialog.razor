@@ -1,0 +1,79 @@
+﻿@using TradingAudit.Shared.DTOs.Strategies
+@using MudBlazor
+@inject IStrategyService StrategyService
+@inject NavigationManager Navigation
+
+<MudDialog>
+    <DialogContent>
+        @if (_isLoading)
+        {
+            <div class="d-flex justify-center my-4"><MudProgressCircular Indeterminate="true"/></div>
+        }
+        else
+        {
+            <MudTable Items="_versions" Hover="true" Dense="true" Elevation="0">
+                <HeaderContent>
+                    <MudTh>Ver</MudTh>
+                    @* <MudTh>Date</MudTh> *@
+                    <MudTh>Rules</MudTh>
+                    <MudTh>Status</MudTh>
+                    <MudTh></MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Ver">v.@context.Version</MudTd>
+                    @* <MudTd DataLabel="Date">@context.CreatedAt.ToShortDateString()</MudTd> *@
+                    <MudTd DataLabel="Rules">@context.Rules.Count</MudTd>
+                    <MudTd DataLabel="Status">
+                        @if (context.IsActive)
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Success">Active</MudChip>
+                        }
+                        else
+                        {
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Text">Archived</MudChip>
+                        }
+                    </MudTd>
+                    <MudTd>
+                        @if (!context.IsActive)
+                        {
+                            <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary"
+                                       OnClick="@(() => Restore(context.Id))">
+                                Відновити
+                            </MudButton>
+                        }
+                        else
+                        {
+                            <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Success" Disabled="true">Current</MudButton>
+                        }
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Закрити</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public Guid GroupId { get; set; }
+
+    private List<TradingStrategyDto> _versions = new();
+    private bool _isLoading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _versions = await StrategyService.GetHistoryAsync(GroupId);
+        _isLoading = false;
+    }
+
+    private void Restore(Guid? id)
+    {
+        // Переходимо на сторінку редагування ЦІЄЇ (старої) версії
+        Navigation.NavigateTo($"/strategies/edit/{id}");
+        MudDialog.Close(DialogResult.Ok(true));
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}

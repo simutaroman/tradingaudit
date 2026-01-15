@@ -25,6 +25,7 @@ builder.Services.AddAuthorizationCore();
 builder.Services.AddScoped<AuthenticationStateProvider, CustomAuthStateProvider>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IImageService, ImageService>();
+builder.Services.AddScoped<IStrategyService, StrategyService>();
 builder.Services.AddMudServices();
 
 await builder.Build().RunAsync();
