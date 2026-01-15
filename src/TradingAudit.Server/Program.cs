@@ -18,6 +18,7 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
 builder.Services.AddAuthorization();
 
 builder.Services.AddIdentityApiEndpoints<ApplicationUser>()
+    .AddRoles<IdentityRole>()
     .AddEntityFrameworkStores<ApplicationDbContext>();
 
 builder.Services.AddTransient<IEmailSender<ApplicationUser>, AzureEmailSender>();
@@ -44,6 +45,25 @@ using (var scope = app.Services.CreateScope())
     {
         var logger = services.GetRequiredService<ILogger<Program>>();
         logger.LogError(ex, "Error during applying migrations");
+    }
+}
+
+// === ПОЧАТОК БЛОКУ SEEDING ===
+// Створюємо Scope, щоб отримати доступ до сервісів БД
+// todo: refactor
+using (var scope = app.Services.CreateScope())
+{
+    var services = scope.ServiceProvider;
+    try
+    {
+        // Викликаємо наш ініціалізатор
+        // Треба додати using TradingAudit.Server.Data;
+        await DbInitializer.InitializeAsync(services);
+    }
+    catch (Exception ex)
+    {
+        var logger = services.GetRequiredService<ILogger<Program>>();
+        logger.LogError(ex, "An error occurred while seeding the database.");
     }
 }
 
