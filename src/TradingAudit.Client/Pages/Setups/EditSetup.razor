@@ -1,0 +1,253 @@
+﻿@page "/setups/edit/{Id:guid}"
+
+@using TradingAudit.Shared.DTOs.Setups
+@using TradingAudit.Shared.DTOs.Strategies
+@using TradingAudit.Shared.Enums
+@using TradingAudit.Shared
+@using TradingAudit.Client.Services
+@using System.Net.Http.Headers
+@using MudBlazor
+
+@inject SetupClient SetupClient
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject NavigationManager Navigation
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-6 mb-16">
+    @if (_setup == null)
+    {
+        <div class="d-flex justify-center mt-10">
+            <MudProgressCircular Indeterminate="true" Color="Color.Primary" Size="Size.Large" />
+        </div>
+    }
+    else
+    {
+        <MudGrid>
+            @* ЛІВА КОЛОНКА: Робочий простір трейдера *@
+            <MudItem xs="12" md="8">
+                <div class="d-flex align-center mb-4">
+                    <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" OnClick="@(() => Navigation.NavigateTo("/setups"))" Class="mr-2" />
+                    <MudText Typo="Typo.h4">@_setup.Symbol (@_setup.Direction.ToString().ToUpper())</MudText>
+                    <MudSpacer />
+                    <MudChip T="string" Color="@GetStatusColor(_setup.Status)" Variant="Variant.Filled">@_setup.Status</MudChip>
+                </div>
+
+                <MudPaper Class="pa-6 mb-6" Elevation="3">
+                    <MudText Typo="Typo.h6" Class="mb-4">Чек-лист стратегії: <b>@_setup.StrategyName</b></MudText>
+                    <MudDivider Class="mb-6" />
+
+                    @foreach (var item in _setup.Checklist.OrderBy(x => x.OrderIndex))
+                    {
+                        <MudCard Elevation="0" Class="mb-6 border-l-4 shadow-sm"
+                                 Style="@(item.IsMet ? "border-color: var(--mud-palette-success); background-color: var(--mud-palette-success-hover);"
+                                                             : "border-color: var(--mud-palette-divider);")">
+                            <MudCardContent>
+                                <MudGrid Spacing="2" AlignItems="AlignItems.Center">
+                                    <MudItem xs="1">
+                                        <MudCheckBox T="bool" @bind-Value="item.IsMet" Color="Color.Success" Size="Size.Large" />
+                                    </MudItem>
+                                    <MudItem xs="11">
+                                        <div class="d-flex align-center">
+                                            <MudText Typo="Typo.subtitle1"><b>@item.RuleTitle</b></MudText>
+                                            @if (item.IsMandatory)
+                                            {
+                                                <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Text" Class="ml-2">Обов'язково</MudChip>
+                                            }
+                                        </div>
+                                        <MudText Typo="Typo.body2" Color="Color.Secondary">@item.RuleDescription</MudText>
+                                    </MudItem>
+
+                                    <MudItem xs="1">@* Spacer *@</MudItem>
+                                    <MudItem xs="11">
+                                        <MudTextField @bind-Value="item.Comment" Label="Нотатки до правила"
+                                                      Variant="Variant.Outlined" Margin="Margin.Dense" Lines="1" />
+
+                                        @* Фото-підтвердження правила *@
+                                        <div class="d-flex flex-wrap gap-2 mt-3 align-center">
+                                            @foreach (var img in item.Images)
+                                            {
+                                                <div class="relative">
+                                                    <MudImage Src="@img.Url" Width="120" Height="70" ObjectFit="ObjectFit.Cover"
+                                                              Class="rounded cursor-pointer border" @onclick="@(() => OpenImage(img.Url))" />
+                                                    <MudIconButton Icon="@Icons.Material.Filled.Cancel" Size="Size.Small" Color="Color.Error"
+                                                                   Class="absolute" Style="top:-10px; right:-10px; background:white; padding:2px;"
+                                                                   OnClick="@(() => item.Images.Remove(img))" />
+                                                </div>
+                                            }
+
+                                            <MudFileUpload T="IBrowserFile" FilesChanged="@(file => UploadItemImage(file, item))">
+                                                <ActivatorContent>
+                                                    <MudButton Variant="Variant.Outlined" Color="Color.Info" Size="Size.Small"
+                                                               StartIcon="@Icons.Material.Filled.AddPhotoAlternate">
+                                                        Доказ
+                                                    </MudButton>
+                                                </ActivatorContent>
+                                            </MudFileUpload>
+                                        </div>
+                                    </MudItem>
+                                </MudGrid>
+                            </MudCardContent>
+                        </MudCard>
+                    }
+                </MudPaper>
+
+                <MudPaper Class="pa-6">
+                    <MudTextField Label="Загальна теза / Торговий план" @bind-Value="_setup.TradingThesis"
+                                  Lines="4" Variant="Variant.Outlined" Placeholder="Опишіть логіку входу..." />
+                </MudPaper>
+            </MudItem>
+
+            @* ПРАВА КОЛОНКА: Статус, Параметри та Обкладинки *@
+            <MudItem xs="12" md="4">
+                <MudPaper Class="pa-6 mb-6" Elevation="4" Style="position: sticky; top: 20px;">
+                    <MudText Typo="Typo.h6" Class="mb-4">Дії</MudText>
+
+                    <MudSelect T="SetupLifecycleStatus" @bind-Value="_setup.Status" Label="Статус сетапу"
+                               Variant="Variant.Outlined" AnchorOrigin="Origin.BottomCenter" Class="mb-6">
+                        @foreach (SetupLifecycleStatus status in Enum.GetValues(typeof(SetupLifecycleStatus)))
+                        {
+                            <MudSelectItem Value="@status">@status.ToString()</MudSelectItem>
+                        }
+                    </MudSelect>
+
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true"
+                               Size="Size.Large" OnClick="SaveSetup" Disabled="_isSaving"
+                               StartIcon="@Icons.Material.Filled.Save">
+                        @if (_isSaving)
+                        {
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                        }
+                        Зберегти план
+                    </MudButton>
+
+                    <MudDivider Class="my-6" />
+
+                    @* Змініть цей блок у правій колонці *@
+                    <MudText Typo="Typo.subtitle2" Class="mb-2">Ринкові дані</MudText>
+                    <div class="d-flex flex-column gap-2">
+                        <MudNumericField Label="Entry" @bind-Value="_setup.EntryPrice"
+                                         Format="N8" Variant="Variant.Outlined" Margin="Margin.Dense" />
+
+                        <MudNumericField Label="Stop Loss" @bind-Value="_setup.StopLoss"
+                                         Format="N8" Variant="Variant.Outlined" Margin="Margin.Dense"  />
+
+                        <MudNumericField Label="Take Profit" @bind-Value="_setup.TakeProfit"
+                                         Format="N8" Variant="Variant.Outlined" Margin="Margin.Dense"  />
+                    </div>
+
+                    <MudDivider Class="my-6" />
+
+                    <MudText Typo="Typo.h6" Class="mb-3">Загальні скріншоти</MudText>
+                    <div class="d-flex flex-wrap gap-2 mb-4">
+                        @foreach (var img in _setup.Images)
+                        {
+                            <div class="relative">
+                                <MudImage Src="@img.Url" Width="100" Height="60" ObjectFit="ObjectFit.Cover" Class="rounded border" />
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                               Class="absolute" Style="top:-5px; right:-5px; background:white; padding:1px;"
+                                               OnClick="@(() => _setup.Images.Remove(img))" />
+                            </div>
+                        }
+                    </div>
+                    <MudFileUpload T="IBrowserFile" FilesChanged="UploadGeneralImage">
+                        <ActivatorContent>
+                            <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.CloudUpload" FullWidth="true" Color="Color.Secondary">
+                                Завантажити чарт
+                            </MudButton>
+                        </ActivatorContent>
+                    </MudFileUpload>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+    }
+</MudContainer>
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+    private SetupResponseDto? _setup;
+    private bool _isSaving;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _setup = await SetupClient.GetByIdAsync(Id);
+        if (_setup == null)
+        {
+            Snackbar.Add("Сетап не знайдено", Severity.Error);
+            Navigation.NavigateTo("/setups");
+        }
+    }
+
+    private Color GetStatusColor(SetupLifecycleStatus status) => status switch
+    {
+        SetupLifecycleStatus.Active => Color.Success,
+        SetupLifecycleStatus.Pending => Color.Warning,
+        SetupLifecycleStatus.Draft => Color.Default,
+        SetupLifecycleStatus.Skipped => Color.Error,
+        _ => Color.Default
+    };
+
+    private async Task SaveSetup()
+    {
+        if (_setup == null) return;
+        _isSaving = true;
+
+        var result = await SetupClient.UpdateAsync(Id, _setup);
+        if (result != null)
+        {
+            _setup = result;
+            Snackbar.Add("Торговий план успішно збережено", Severity.Success);
+        }
+        _isSaving = false;
+    }
+
+    // --- ЛОГІКА ЗАВАНТАЖЕННЯ (Аналогічно Стратегіям) ---
+
+    private async Task UploadGeneralImage(IBrowserFile file)
+    {
+        var url = await UploadFileToServer(file, "SetupGeneral");
+        if (url != null) _setup?.Images.Add(new SetupImageDto { Id = Guid.Empty, Url = url, Description = "Main Chart" });
+    }
+
+    private async Task UploadItemImage(IBrowserFile file, SetupChecklistItemDto item)
+    {
+        var url = await UploadFileToServer(file, $"Rule_{item.Id}");
+        if (url != null) item.Images.Add(new SetupImageDto { Id = Guid.Empty, Url = url, Description = "Rule Proof" });
+    }
+
+    private async Task<string?> UploadFileToServer(IBrowserFile file, string nameContext)
+    {
+        if (file.Size > 5 * 1024 * 1024)
+        {
+            Snackbar.Add("Файл занадто великий (макс 5Мб)", Severity.Warning);
+            return null;
+        }
+
+        try
+        {
+            using var content = new MultipartFormDataContent();
+            var fileContent = new StreamContent(file.OpenReadStream(maxAllowedSize: 5 * 1024 * 1024));
+            fileContent.Headers.ContentType = new MediaTypeHeaderValue(file.ContentType);
+
+            content.Add(content: fileContent, name: "\"file\"", fileName: file.Name);
+            content.Add(content: new StringContent(nameContext), name: "\"name\"");
+
+            var response = await Http.PostAsync("api/UserImages", content);
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<UserImageDto>();
+                return result?.Url;
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Помилка завантаження: {ex.Message}", Severity.Error);
+        }
+        return null;
+    }
+
+    private void OpenImage(string url)
+    {
+        // Можна відкрити MudDialog з великою картинкою
+    }
+}

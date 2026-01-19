@@ -1,0 +1,163 @@
+﻿@page "/setups"
+@using TradingAudit.Shared.DTOs.Setups
+@using TradingAudit.Shared.Enums
+@using TradingAudit.Client.Services
+@using MudBlazor
+
+@inject SetupClient SetupClient
+@inject IDialogService DialogService
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-8">
+    <div class="d-flex align-center mb-6">
+        <MudText Typo="Typo.h4">Мої торгові плани</MudText>
+        <MudSpacer />
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Add"
+                   OnClick="OpenCreateDialog"
+                   Size="Size.Large">
+            Новий сетап
+        </MudButton>
+    </div>
+
+    @if (_isLoading)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-7" />
+    }
+    else if (!_setups.Any())
+    {
+        <MudPaper Class="pa-10 d-flex flex-column align-center border-dashed" Elevation="0" Style="background: transparent;">
+            <MudIcon Icon="@Icons.Material.Filled.Assignment" Size="Size.Large" Color="Color.Default" Style="font-size: 100px;" />
+            <MudText Typo="Typo.h6" Color="Color.Secondary" Class="mt-4">У вас ще немає створених планів</MudText>
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" Class="mt-4" OnClick="OpenCreateDialog">Створити перший план</MudButton>
+        </MudPaper>
+    }
+    else
+    {
+        <MudGrid>
+            @foreach (var setup in _setups)
+            {
+                <MudItem xs="12" sm="6" md="4">
+                    <MudCard Elevation="3" Class="setup-card h-100 d-flex flex-column">
+                        <MudCardHeader>
+                            <CardHeaderContent>
+                                <div class="d-flex justify-space-between align-center">
+                                    <MudText Typo="Typo.h6"><b>@setup.Symbol</b></MudText>
+                                    <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(setup.Status)" Variant="Variant.Filled">
+                                        @setup.Status
+                                    </MudChip>
+                                </div>
+                                <MudText Typo="Typo.caption">Стратегія: @setup.StrategyName (v.@setup.StrategyVersion)</MudText>
+                            </CardHeaderContent>
+                        </MudCardHeader>
+
+                        <MudCardContent Class="flex-grow-1">
+                            <div class="d-flex justify-space-between mb-2">
+                                <MudText Typo="Typo.body2">Напрямок:</MudText>
+                                <MudText Typo="Typo.body2" Color="@(setup.Direction == TradeDirection.Long ? Color.Success : Color.Error)">
+                                    <b>@setup.Direction.ToString().ToUpper()</b>
+                                </MudText>
+                            </div>
+                            <div class="d-flex justify-space-between mb-2">
+                                <MudText Typo="Typo.body2">Вхід:</MudText>
+                                <MudText Typo="Typo.body2">@setup.EntryPrice.ToString("F8").TrimEnd('0').TrimEnd('.')</MudText>
+                            </div>
+                            <div class="d-flex justify-space-between">
+                                <MudText Typo="Typo.body2">Створено:</MudText>
+                                <MudText Typo="Typo.body2">@setup.CreatedAt.ToShortDateString()</MudText>
+                            </div>
+
+                            @if (!string.IsNullOrEmpty(setup.TradingThesis))
+                            {
+                                <MudText Typo="Typo.body2" Class="mt-3 text-truncate" Style="max-width: 100%; color: gray; font-style: italic;">
+                                    "@setup.TradingThesis"
+                                </MudText>
+                            }
+                        </MudCardContent>
+
+                        <MudCardActions>
+                            <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" OnClick="@(() => Navigation.NavigateTo($"/setups/edit/{setup.Id}"))" />
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="@(() => ConfirmDelete(setup))" />
+                            <MudSpacer />
+                            <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="@(() => Navigation.NavigateTo($"/setups/edit/{setup.Id}"))">Деталі</MudButton>
+                        </MudCardActions>
+                    </MudCard>
+                </MudItem>
+            }
+        </MudGrid>
+    }
+</MudContainer>
+
+<style>
+    .setup-card {
+        transition: transform 0.2s;
+        border-top: 4px solid var(--mud-palette-primary);
+    }
+
+        .setup-card:hover {
+            transform: translateY(-5px);
+        }
+</style>
+
+@code {
+    private List<SetupResponseDto> _setups = new();
+    private bool _isLoading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        _isLoading = true;
+        _setups = await SetupClient.GetAllAsync();
+        _isLoading = false;
+    }
+
+    private Color GetStatusColor(SetupLifecycleStatus status) => status switch
+    {
+        SetupLifecycleStatus.Active => Color.Success,
+        SetupLifecycleStatus.Pending => Color.Warning,
+        SetupLifecycleStatus.Draft => Color.Default,
+        SetupLifecycleStatus.Skipped => Color.Error,
+        _ => Color.Default
+    };
+
+    private async Task OpenCreateDialog()
+    {
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseButton = true };
+        var dialog = await DialogService.ShowAsync<CreateSetupDialog>("Новий торговий план", options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled && result.Data is SetupCreateDto newSetup)
+        {
+            var created = await SetupClient.CreateAsync(newSetup);
+            if (created != null)
+            {
+                Snackbar.Add("План створено!", Severity.Success);
+                Navigation.NavigateTo($"/setups/edit/{created.Id}");
+            }
+        }
+    }
+
+    private async Task ConfirmDelete(SetupResponseDto setup)
+    {
+        bool? result = await DialogService.ShowMessageBox(
+            "Видалення",
+            $"Ви впевнені, що хочете видалити план для {setup.Symbol}?",
+            yesText: "Видалити", cancelText: "Скасувати");
+
+        if (result == true)
+        {
+            var success = await SetupClient.DeleteAsync(setup.Id);
+            if (success)
+            {
+                _setups.Remove(setup);
+                Snackbar.Add("План видалено", Severity.Info);
+            }
+        }
+    }
+}

@@ -2,6 +2,7 @@
 
 namespace TradingAudit.Server.Entities;
 
+// todo: delete all user image functionality, as it is for test purposes only
 public class UserImage
 {
     public Guid Id { get; set; }

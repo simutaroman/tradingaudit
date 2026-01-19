@@ -1,0 +1,59 @@
+﻿@using TradingAudit.Shared.DTOs.Setups
+@using TradingAudit.Shared.DTOs.Strategies
+@using TradingAudit.Shared.Enums
+@using MudBlazor
+@inject IStrategyService StrategyService
+
+<MudDialog>
+    <TitleContent>Новий торговий план</TitleContent>
+    <DialogContent>
+        @if (_strategies == null)
+        {
+            <MudProgressCircular Indeterminate="true" />
+        }
+        else
+        {
+            <MudForm @ref="_form" @bind-IsValid="@_success">
+                <MudSelect T="Guid"
+                           Label="Стратегія"
+                           @bind-Value="_model.StrategyId"
+                           Required="true"
+                           Variant="Variant.Outlined"
+                           AnchorOrigin="Origin.BottomCenter">
+                    @if (_strategies != null)
+                    {
+                        @foreach (var s in _strategies)
+                        {
+                            <MudSelectItem T="Guid" Value="@(s.Id ?? Guid.Empty)">
+                                @s.Name (v.@s.Version)
+                            </MudSelectItem>
+                        }
+                    }
+                </MudSelect>
+                <MudTextField T="string" Label="Символ" @bind-Value="_model.Symbol" Required="true" Class="mt-4" />
+                @* Додай інші поля за потреби *@
+            </MudForm>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Скасувати</MudButton>
+        <MudButton Color="Color.Primary" OnClick="Submit" Disabled="@(!_success)">Створити</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
+    private List<TradingStrategyDto>? _strategies;
+    private SetupCreateDto _model = new();
+    private MudForm _form = default!;
+    private bool _success;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Завантажуємо ТІЛЬКИ стратегії для вибору
+        _strategies = await StrategyService.GetStrategiesAsync();
+    }
+
+    private void Submit() => MudDialog.Close(DialogResult.Ok(_model));
+    private void Cancel() => MudDialog.Cancel();
+}

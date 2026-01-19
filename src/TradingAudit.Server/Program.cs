@@ -93,6 +93,7 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddOpenApi();
 builder.Services.AddSingleton<IBlobService, BlobService>();
 builder.Services.AddScoped<IStrategyService, StrategyService>();
+builder.Services.AddScoped<ISetupService, SetupService>();
 
 var app = builder.Build();
 

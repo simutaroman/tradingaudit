@@ -15,6 +15,12 @@ builder.Services.AddHttpClient("API", client =>
     client.BaseAddress = new Uri(builder.HostEnvironment.BaseAddress))
     .AddHttpMessageHandler<JwtAuthHandler>();
 
+builder.Services.AddHttpClient<SetupClient>(client =>
+{
+    client.BaseAddress = new Uri(builder.HostEnvironment.BaseAddress);
+})
+.AddHttpMessageHandler<JwtAuthHandler>();
+
 // 3. Кажемо додатку: коли хтось просить просто HttpClient, дай йому той, що ми налаштували вище ("API")
 builder.Services.AddScoped(sp => sp.GetRequiredService<IHttpClientFactory>().CreateClient("API"));
 // LocalStorage
