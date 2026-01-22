@@ -94,6 +94,8 @@ builder.Services.AddOpenApi();
 builder.Services.AddSingleton<IBlobService, BlobService>();
 builder.Services.AddScoped<IStrategyService, StrategyService>();
 builder.Services.AddScoped<ISetupService, SetupService>();
+// Реєстрація сервісів для Execution
+builder.Services.AddScoped<IExecutionService, ExecutionService>();
 
 var app = builder.Build();
 

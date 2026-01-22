@@ -22,6 +22,9 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<SetupChecklistItem> SetupChecklistItems { get; set; }
     public DbSet<SetupImage> SetupImages { get; set; }
     public DbSet<SetupChecklistItemImage> SetupChecklistItemImages { get; set; }
+    public DbSet<Execution> Executions => Set<Execution>();
+    public DbSet<ExchangeOrder> ExchangeOrders => Set<ExchangeOrder>();
+    public DbSet<OrderFill> OrderFills => Set<OrderFill>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {

@@ -1,4 +1,5 @@
-﻿using TradingAudit.Shared.Enums;
+﻿using TradingAudit.Shared.DTOs.Executions;
+using TradingAudit.Shared.Enums;
 
 namespace TradingAudit.Shared.DTOs.Setups;
 
@@ -26,4 +27,6 @@ public class SetupResponseDto
 
     public List<SetupImageDto> Images { get; set; } = new();
     public List<SetupChecklistItemDto> Checklist { get; set; } = new();
+
+    public ExecutionResponseDto? Execution { get; set; }
 }

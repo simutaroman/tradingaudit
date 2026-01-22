@@ -9,7 +9,7 @@ using TradingAudit.Shared.Enums;
 
 namespace TradingAudit.Server.Services;
 
-public class SetupService: ISetupService
+public class SetupService : ISetupService
 {
     private readonly ApplicationDbContext _context;
     private readonly IMapper _mapper;
@@ -70,6 +70,9 @@ public class SetupService: ISetupService
                 .ThenInclude(ci => ci.StrategyRule)
             .Include(s => s.ChecklistItems)
                 .ThenInclude(ci => ci.Images)
+            .Include(s => s.Execution)
+                .ThenInclude(e => e.Orders)
+                    .ThenInclude(o => o.Fills)
             .FirstOrDefaultAsync(s => s.Id == id && s.UserId == userId);
 
         if (setup == null) throw new KeyNotFoundException("Setup not found");
@@ -110,7 +113,7 @@ public class SetupService: ISetupService
             // userId не міняємо
             // strategyId не міняємо
             existingSetup.ConfidenceLevel = dto.ConfidenceLevel;
-            existingSetup.CreatedAt  = dto.CreatedAt;
+            existingSetup.CreatedAt = dto.CreatedAt;
             existingSetup.Direction = dto.Direction;
             existingSetup.EntryPrice = dto.EntryPrice;
             existingSetup.Mood = dto.Mood;

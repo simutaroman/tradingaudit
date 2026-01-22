@@ -11,15 +11,16 @@ public class Setup
     public Guid StrategyId { get; set; }
     public TradingStrategy? Strategy { get; set; }
 
+    public Guid? ExecutionId { get; set; } // Додаємо явний FK
+    public Execution? Execution { get; set; }
+
     public string Symbol { get; set; } = string.Empty;
     public TradeDirection Direction { get; set; } // Enum
     public string Timeframe { get; set; } = string.Empty;
-
     public decimal EntryPrice { get; set; }
     public decimal StopLoss { get; set; }
     public decimal TakeProfit { get; set; }
     public decimal? PositionSize { get; set; }
-
     public string? TradingThesis { get; set; }
     public string? Mood { get; set; } // Залишаємо STRING (теги або текст)
     public int ConfidenceLevel { get; set; }

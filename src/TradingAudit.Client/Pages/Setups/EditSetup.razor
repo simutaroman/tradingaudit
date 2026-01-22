@@ -1,5 +1,6 @@
 ﻿@page "/setups/edit/{Id:guid}"
 
+@using TradingAudit.Client.Pages.Executions
 @using TradingAudit.Shared.DTOs.Setups
 @using TradingAudit.Shared.DTOs.Strategies
 @using TradingAudit.Shared.Enums
@@ -9,6 +10,7 @@
 @using MudBlazor
 
 @inject SetupClient SetupClient
+@inject ExecutionClient ExecutionClient
 @inject HttpClient Http
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
@@ -122,6 +124,42 @@
                     </MudButton>
 
                     <MudDivider Class="my-6" />
+                    @* НОВИЙ БЛОК: EXECUTION *@
+                    <MudPaper Class="pa-4 mb-6 border-t-4" Style="border-color: var(--mud-palette-info); background-color: var(--mud-palette-background-grey);" Elevation="0">
+                        <div class="d-flex align-center mb-4">
+                            <MudText Typo="Typo.subtitle1"><b>Виконання (Execution)</b></MudText>
+                            <MudSpacer />
+                            <MudIconButton Icon="@Icons.Material.Filled.Link" Color="Color.Info" Size="Size.Small" OnClick="OpenOrderLinking" Title="Прив'язати ордери з біржі" />
+                        </div>
+
+                        @if (_setup.Execution == null)
+                        {
+                            <MudText Typo="Typo.body2" Color="Color.Secondary" Align="Align.Center" Class="py-2">
+                                Ордери не прив'язані
+                            </MudText>
+                        }
+                        else
+                        {
+                            <div class="d-flex flex-column gap-2">
+                                <div class="d-flex justify-space-between">
+                                    <MudText Typo="Typo.body2">Net PnL:</MudText>
+                                    <MudText Typo="Typo.body2" Color="@(_setup.Execution.NetPnL >= 0 ? Color.Success : Color.Error)">
+                                        <b>@_setup.Execution.NetPnL.ToString("N2") USDT</b>
+                                    </MudText>
+                                </div>
+                                <div class="d-flex justify-space-between">
+                                    <MudText Typo="Typo.body2">ROI:</MudText>
+                                    <MudText Typo="Typo.body2">@_setup.Execution.ROI.ToString("N2")%</MudText>
+                                </div>
+                                <div class="d-flex justify-space-between">
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">Slippage:</MudText>
+                                    <MudText Typo="Typo.caption" Color="@(Math.Abs(_setup.Execution.SlippagePercent) > 0.5m ? Color.Warning : Color.Secondary)">
+                                        @_setup.Execution.SlippagePercent.ToString("N2")%
+                                    </MudText>
+                                </div>
+                            </div>
+                        }
+                    </MudPaper>
 
                     @* Змініть цей блок у правій колонці *@
                     <MudText Typo="Typo.subtitle2" Class="mb-2">Ринкові дані</MudText>
@@ -249,5 +287,50 @@
     private void OpenImage(string url)
     {
         // Можна відкрити MudDialog з великою картинкою
+    }
+
+    private async Task OpenOrderLinking()
+    {
+        if (_setup == null) return;
+
+        // Налаштовуємо параметри для діалогу
+        var parameters = new DialogParameters { ["Symbol"] = _setup.Symbol };
+
+        // Налаштовуємо зовнішній вигляд діалогу
+        var options = new DialogOptions
+        {
+            CloseButton = true,
+            MaxWidth = MaxWidth.Small,
+            FullWidth = true,
+            BackdropClick = true
+        };
+
+        // Відкриваємо SelectOrdersDialog (переконайся, що назва файлу діалогу збігається)
+        var dialog = DialogService.Show<SelectOrdersDialog>("Вибір ордерів", parameters, options);
+        var result = await dialog.Result;
+
+        // Якщо користувач натиснув "Прив'язати" і повернув список ID
+        if (!result.Canceled && result.Data is List<Guid> selectedIds)
+        {
+            var request = new LinkOrdersRequestDto
+            {
+                SetupId = Id,
+                OrderIds = selectedIds
+            };
+
+            // Викликаємо клієнт для зв'язку на бекенді
+            var execution = await ExecutionClient.LinkOrdersAsync(request);
+
+            if (execution != null)
+            {
+                _setup.Execution = execution; // Оновлюємо локальну модель
+                Snackbar.Add("Ордери успішно прив'язані та PnL перераховано", Severity.Success);
+                StateHasChanged(); // Примусово оновлюємо UI
+            }
+            else
+            {
+                Snackbar.Add("Не вдалося прив'язати ордери", Severity.Error);
+            }
+        }
     }
 }

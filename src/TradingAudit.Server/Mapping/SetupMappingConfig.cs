@@ -13,7 +13,8 @@ public class SetupMappingConfig : IRegister
             .Map(dest => dest.StrategyName, src => src.Strategy != null ? src.Strategy.Name : string.Empty)
             .Map(dest => dest.StrategyVersion, src => src.Strategy != null ? src.Strategy.Version : 0)
             .Map(dest => dest.Images, src => src.Images)
-            .Map(dest => dest.Checklist, src => src.ChecklistItems);
+            .Map(dest => dest.Checklist, src => src.ChecklistItems)
+            .Map(dest => dest.Execution, src => src.Execution);
 
         config.NewConfig<SetupChecklistItem, SetupChecklistItemDto>()
             .Map(dest => dest.RuleTitle, src => src.StrategyRule != null ? src.StrategyRule.Title : "Deleted Rule")
