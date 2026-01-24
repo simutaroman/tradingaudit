@@ -97,6 +97,9 @@ builder.Services.AddScoped<ISetupService, SetupService>();
 // Реєстрація сервісів для Execution
 builder.Services.AddScoped<IExecutionService, ExecutionService>();
 
+builder.Services.AddSingleton<IEncryptionService, AesEncryptionService>();
+builder.Services.AddScoped<IExchangeKeyService, ExchangeKeyService>();
+
 var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())

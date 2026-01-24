@@ -1,0 +1,157 @@
+﻿@page "/apikeys"
+@using TradingAudit.Shared.DTOs.ExchangeKeys
+
+@attribute [Authorize]
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+
+<MudText Typo="Typo.h4" Class="mb-6">Керування API ключами</MudText>
+
+<MudGrid>
+    @* Форма додавання *@
+    <MudItem xs="12" md="5">
+        <MudCard Elevation="4">
+            <MudCardHeader>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6">Додати нове підключення</MudText>
+                </CardHeaderContent>
+            </MudCardHeader>
+            <MudCardContent>
+                <MudSelect T="string" Label="Біржа" @bind-Value="_model.ExchangeName" Variant="Variant.Outlined" Class="mb-4">
+                    <MudSelectItem Value="@("Bybit")">Bybit (V5)</MudSelectItem>
+                    <MudSelectItem Value="@("Binance")">Binance (Soon)</MudSelectItem>
+                </MudSelect>
+
+                <MudTextField Label="Назва (напр. Main Account)" @bind-Value="_model.Label" 
+                              Variant="Variant.Outlined" Class="mb-4" HelperText="Необов'язково" />
+
+                <MudTextField Label="API Key" @bind-Value="_model.ApiKey" 
+                              Variant="Variant.Outlined" Class="mb-4" />
+
+                <MudTextField Label="API Secret" @bind-Value="_model.ApiSecret" 
+                              InputType="InputType.Password" Variant="Variant.Outlined" />
+            </MudCardContent>
+            <MudCardActions>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" 
+                           OnClick="SaveKey" FullWidth="true" Disabled="_isProcessing">
+                    @if (_isProcessing)
+                    {
+                        <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
+                        <MudText Class="ms-2">Збереження...</MudText>
+                    }
+                    else
+                    {
+                        <MudText>Підключити біржу</MudText>
+                    }
+                </MudButton>
+            </MudCardActions>
+        </MudCard>
+    </MudItem>
+
+    @* Список існуючих ключів *@
+    <MudItem xs="12" md="7">
+        <MudTable Items="_keys" Hover="true" Breakpoint="Breakpoint.Sm" 
+                  Loading="_loading" LoadingProgressColor="Color.Info" Elevation="4">
+            <HeaderContent>
+                <MudTh>Біржа</MudTh>
+                <MudTh>Назва</MudTh>
+                <MudTh>Ключ</MudTh>
+                <MudTh>Статус</MudTh>
+                <MudTh>Дії</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Біржа">
+                    @* Додаємо T="string" для MudChip *@
+                    <MudChip T="string" Color="Color.Dark" Size="Size.Small">@context.ExchangeName</MudChip>
+                </MudTd>
+                <MudTd DataLabel="Назва">@context.Label</MudTd>
+                <MudTd DataLabel="Ключ"><code style="font-size: 0.8rem;">@context.MaskedApiKey</code></MudTd>
+                <MudTd DataLabel="Статус">
+                    @if (context.IsActive)
+                    {
+                        <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Size="Size.Small" />
+                    }
+                    else
+                    {
+                        <MudIcon Icon="@Icons.Material.Filled.Error" Color="Color.Error" Size="Size.Small" />
+                    }
+                </MudTd>
+                <MudTd>
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error"
+                                   Size="Size.Small" OnClick="@(() => DeleteKey(context.Id))" />
+                </MudTd>
+            </RowTemplate>
+            <NoRecordsContent>
+                <MudText>У вас поки немає підключених бірж</MudText>
+            </NoRecordsContent>
+        </MudTable>
+    </MudItem>
+</MudGrid>
+
+@code {
+    private List<ExchangeKeyResponseDto> _keys = new();
+    private ExchangeKeyRequestDto _model = new();
+    private bool _loading = true;
+    private bool _isProcessing = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadKeys();
+    }
+
+    private async Task LoadKeys()
+    {
+        _loading = true;
+        try
+        {
+            _keys = await Http.GetFromJsonAsync<List<ExchangeKeyResponseDto>>("api/exchangesettings/keys") ?? new();
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task SaveKey()
+    {
+        if (string.IsNullOrWhiteSpace(_model.ApiKey) || string.IsNullOrWhiteSpace(_model.ApiSecret))
+        {
+            Snackbar.Add("Ключ та секрет обов'язкові", Severity.Warning);
+            return;
+        }
+
+        _isProcessing = true;
+        var response = await Http.PostAsJsonAsync("api/exchangesettings/keys", _model);
+        _isProcessing = false;
+
+        if (response.IsSuccessStatusCode)
+        {
+            Snackbar.Add("Біржу успішно підключено", Severity.Success);
+            _model = new();
+            await LoadKeys();
+        }
+        else
+        {
+            Snackbar.Add("Помилка підключення. Перевірте дані.", Severity.Error);
+        }
+    }
+
+    private async Task DeleteKey(Guid id)
+    {
+        bool? result = await DialogService.ShowMessageBox(
+            "Видалення", 
+            "Ви впевнені, що хочете видалити це підключення? Синхронізація ордерів зупиниться.", 
+            yesText: "Видалити", cancelText: "Скасувати");
+
+        if (result == true)
+        {
+            var response = await Http.DeleteAsync($"api/exchangesettings/keys/{id}");
+            if (response.IsSuccessStatusCode)
+            {
+                Snackbar.Add("Ключ видалено", Severity.Info);
+                await LoadKeys();
+            }
+        }
+    }
+}

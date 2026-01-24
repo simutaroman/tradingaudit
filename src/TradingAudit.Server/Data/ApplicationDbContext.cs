@@ -26,6 +26,8 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<ExchangeOrder> ExchangeOrders => Set<ExchangeOrder>();
     public DbSet<OrderFill> OrderFills => Set<OrderFill>();
 
+    public DbSet<UserExchangeKey> UserExchangeKeys { get; set; }
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
