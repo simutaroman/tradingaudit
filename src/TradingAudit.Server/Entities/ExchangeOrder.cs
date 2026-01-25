@@ -24,4 +24,7 @@ public class ExchangeOrder
     public Execution? Execution { get; set; }
 
     public List<OrderFill> Fills { get; set; } = new();
+
+    public Guid? UserExchangeKeyId { get; set; }
+    public UserExchangeKey? ExchangeKey { get; set; }
 }

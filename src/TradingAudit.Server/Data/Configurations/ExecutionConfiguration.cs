@@ -2,31 +2,28 @@
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using TradingAudit.Server.Entities;
 
-public class ExchangeOrderConfiguration : IEntityTypeConfiguration<ExchangeOrder>
+public class ExecutionConfiguration : IEntityTypeConfiguration<Execution>
 {
-    public void Configure(EntityTypeBuilder<ExchangeOrder> builder)
+    public void Configure(EntityTypeBuilder<Execution> builder)
     {
-        builder.ToTable("ExchangeOrders");
+        builder.ToTable("Executions");
         builder.HasKey(x => x.Id);
 
-        builder.Property(x => x.ExternalOrderId).IsRequired().HasMaxLength(100);
-        builder.Property(x => x.Symbol).IsRequired().HasMaxLength(20);
-        builder.Property(x => x.Side).IsRequired().HasMaxLength(10);
-        builder.Property(x => x.Type).IsRequired().HasMaxLength(20);
-        builder.Property(x => x.Status).IsRequired().HasMaxLength(20);
-
-        builder.Property(x => x.Price).HasColumnType("decimal(18,8)");
-        builder.Property(x => x.Amount).HasColumnType("decimal(18,8)");
-        builder.Property(x => x.ExecutedAmount).HasColumnType("decimal(18,8)");
-
-        // Індекси
-        builder.HasIndex(x => x.UserId);
-        builder.HasIndex(x => new { x.ExternalOrderId, x.UserId }).IsUnique();
+        // Налаштування для Decimal (точність для крипти)
+        builder.Property(x => x.RealizedPnL).HasColumnType("decimal(18,8)");
+        builder.Property(x => x.NetPnL).HasColumnType("decimal(18,8)");
+        builder.Property(x => x.TotalCommission).HasColumnType("decimal(18,8)");
+        builder.Property(x => x.TotalFunding).HasColumnType("decimal(18,8)");
+        builder.Property(x => x.AvgEntryPrice).HasColumnType("decimal(18,8)");
+        builder.Property(x => x.AvgExitPrice).HasColumnType("decimal(18,8)");
+        builder.Property(x => x.ROI).HasColumnType("decimal(18,4)"); // Для % достатньо 4 знаки
+        builder.Property(x => x.SlippagePoints).HasColumnType("decimal(18,8)");
+        builder.Property(x => x.SlippagePercent).HasColumnType("decimal(18,4)");
 
         // Зв'язки
-        builder.HasOne(x => x.Execution)
-            .WithMany(e => e.Orders)
-            .HasForeignKey(x => x.ExecutionId)
-            .OnDelete(DeleteBehavior.SetNull); // Видалили аналітику -> ордери стали "сиротами", але не зникли
+        builder.HasOne(x => x.Setup)
+            .WithOne(s => s.Execution)
+            .HasForeignKey<Execution>(x => x.SetupId)
+            .OnDelete(DeleteBehavior.Cascade); // Видалили сетап -> видалили виконання
     }
 }

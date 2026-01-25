@@ -4,8 +4,10 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Scalar.AspNetCore;
 using System.Reflection;
+using TradingAudit.Server.BackgroundServices;
 using TradingAudit.Server.Data;
 using TradingAudit.Server.Entities;
+using TradingAudit.Server.Providers;
 using TradingAudit.Server.Services;
 using TradingAudit.Server.Services.Interfaces;
 using TradingAudit.Shared.Constants;
@@ -99,6 +101,11 @@ builder.Services.AddScoped<IExecutionService, ExecutionService>();
 
 builder.Services.AddSingleton<IEncryptionService, AesEncryptionService>();
 builder.Services.AddScoped<IExchangeKeyService, ExchangeKeyService>();
+// Реєструємо провайдери як Scoped
+builder.Services.AddScoped<IExchangeProvider, BybitProvider>();
+
+// Реєструємо сам воркер як Hosted Service
+builder.Services.AddHostedService<ExchangeSyncWorker>();
 
 var app = builder.Build();
 
